@@ -13,8 +13,10 @@
 #   PROTO_DIR     — proto directory (default: proto)
 #   DEFAULT_APP   — primary app for OPL output (default: apps/default)
 #   APP_DIRS      — all app directories (default: apps/default)
-#   TOOLS_VER     — common tools version (default: latest)
+#   TOOLS_VER     — common tools version (default: v1.1.0)
 #   BIN           — tool binary directory (default: .tmp/bin)
+#   HAS_UI        — set to true to enable Flutter UI targets (default: false)
+#   UI_DIR        — Flutter UI directory (default: ui)
 
 SHELL := bash
 .SHELLFLAGS := -eu -o pipefail -c
@@ -33,6 +35,8 @@ GO               ?= go
 TOOLS_VER        ?= v1.1.0
 COPYRIGHT_YEARS  ?= 2023-2026
 COPYRIGHT_HOLDER ?= Ant Investor Ltd
+HAS_UI           ?= false
+UI_DIR           ?= ui
 
 export PATH  := $(BIN):$(PATH)
 export GOBIN := $(BIN)
@@ -139,18 +143,100 @@ tidy: ## Tidy Go modules
 	$(GO) fmt ./...
 
 # ------------------------------------------------------------------------------
+# Flutter UI targets (enabled when HAS_UI=true)
+# ------------------------------------------------------------------------------
+
+ifeq ($(HAS_UI),true)
+
+FLUTTER_CHANNEL  ?= stable
+BFF_BASE_URL     ?= http://localhost:8080
+OIDC_CLIENT_ID   ?= ""
+OIDC_ISSUER      ?= ""
+
+.PHONY: flutter-setup
+flutter-setup: ## Install Flutter SDK if not present
+	@if command -v flutter >/dev/null 2>&1; then \
+		echo "Flutter: $$(flutter --version | head -1)"; \
+	else \
+		echo "Flutter not found — install from https://flutter.dev/docs/get-started/install"; \
+		exit 1; \
+	fi
+
+.PHONY: ui-deps
+ui-deps: flutter-setup ## Install Flutter dependencies
+	cd $(UI_DIR) && flutter pub get
+
+.PHONY: ui-generate
+ui-generate: ui-deps ## Run build_runner code generation
+	@if grep -q 'build_runner' $(UI_DIR)/pubspec.yaml 2>/dev/null; then \
+		cd $(UI_DIR) && dart run build_runner build --delete-conflicting-outputs; \
+	fi
+
+.PHONY: ui-analyze
+ui-analyze: ui-deps ## Analyze Flutter code
+	cd $(UI_DIR) && flutter analyze --no-fatal-infos
+
+.PHONY: ui-test
+ui-test: ui-generate ## Run Flutter tests
+	cd $(UI_DIR) && flutter test
+
+.PHONY: ui-build-dev
+ui-build-dev: ui-generate ## Build Flutter web (development)
+	cd $(UI_DIR) && flutter build web \
+		--profile \
+		--base-href="/" \
+		--dart-define=BFF_BASE_URL=$(BFF_BASE_URL) \
+		--dart-define=OIDC_CLIENT_ID=$(OIDC_CLIENT_ID) \
+		--dart-define=OIDC_ISSUER=$(OIDC_ISSUER) \
+		--source-maps
+	@echo "Dev build: $(UI_DIR)/build/web/"
+
+.PHONY: ui-build-prod
+ui-build-prod: ui-generate ## Build Flutter web (production)
+	cd $(UI_DIR) && flutter build web \
+		--release \
+		--base-href="/" \
+		--tree-shake-icons \
+		--dart-define=BFF_BASE_URL=$(BFF_BASE_URL) \
+		--dart-define=OIDC_CLIENT_ID=$(OIDC_CLIENT_ID) \
+		--dart-define=OIDC_ISSUER=$(OIDC_ISSUER) \
+		--dart-define=ENV=production
+	@echo "Production build: $(UI_DIR)/build/web/"
+
+.PHONY: ui-build
+ui-build: ui-build-dev ## Default UI build (development)
+
+.PHONY: ui-clean
+ui-clean: ## Clean Flutter build artifacts
+	cd $(UI_DIR) && flutter clean
+	rm -rf $(UI_DIR)/build
+
+endif # HAS_UI
+
+# ------------------------------------------------------------------------------
 # Aggregate targets
 # ------------------------------------------------------------------------------
 
+ifeq ($(HAS_UI),true)
+.PHONY: all
+all: proto-lint build test lint ui-analyze ui-test ## Full pipeline: protos, Go build+test+lint, Flutter analyze+test
+else
 .PHONY: all
 all: proto-lint build test lint ## Full pipeline: lint protos, generate, build, test, lint Go
+endif
 
 .PHONY: generate
 generate: proto-generate ## Alias for proto-generate
 
+ifeq ($(HAS_UI),true)
+.PHONY: clean
+clean: ui-clean ## Delete generated / temporary files
+	rm -rf $(BIN)
+else
 .PHONY: clean
 clean: ## Delete generated / temporary files
 	rm -rf $(BIN)
+endif
 
 .PHONY: help
 help: ## Show this help

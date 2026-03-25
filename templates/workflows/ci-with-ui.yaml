@@ -1,0 +1,16 @@
+# CI for services with both Go backend and Flutter UI
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  test:
+    uses: antinvestor/common/.github/workflows/go-test.yml@main
+  lint:
+    uses: antinvestor/common/.github/workflows/golangci-lint.yml@main
+  flutter:
+    uses: antinvestor/common/.github/workflows/flutter-ci.yml@main
+    with:
+      ui_dir: ui

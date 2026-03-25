@@ -1,0 +1,55 @@
+# Reusable workflow: Flutter CI (analyze + test + build web)
+name: Flutter CI
+on:
+  workflow_call:
+    inputs:
+      ui_dir:
+        description: "Flutter UI directory"
+        required: false
+        default: "ui"
+        type: string
+      flutter_version:
+        description: "Flutter version"
+        required: false
+        default: "stable"
+        type: string
+      run_build:
+        description: "Whether to run flutter build web"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  flutter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ inputs.flutter_version }}
+          cache: true
+
+      - name: Install dependencies
+        working-directory: ${{ inputs.ui_dir }}
+        run: flutter pub get
+
+      - name: Generate code
+        working-directory: ${{ inputs.ui_dir }}
+        run: |
+          if grep -q 'build_runner' pubspec.yaml; then
+            dart run build_runner build --delete-conflicting-outputs
+          fi
+
+      - name: Analyze
+        working-directory: ${{ inputs.ui_dir }}
+        run: flutter analyze --no-fatal-infos
+
+      - name: Test
+        working-directory: ${{ inputs.ui_dir }}
+        run: flutter test
+
+      - name: Build web
+        if: inputs.run_build
+        working-directory: ${{ inputs.ui_dir }}
+        run: flutter build web --release
