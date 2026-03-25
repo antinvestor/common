@@ -1,7 +1,7 @@
 buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260209202127-80ab13bee0bf.1 h1:PMmTMyvHScV9Mn8wc6ASge9uRcHy0jtqPd+fM35LmsQ=
 buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260209202127-80ab13bee0bf.1/go.mod h1:tvtbpgaVXZX4g6Pn+AnzFycuRK3MOz5HJfEGeEllXYM=
-github.com/antinvestor/common v1.1.0 h1:q7pg2u84FnsGWzNAzoPq8MnEbmch8lqBxJ9MHUZDoFg=
-github.com/antinvestor/common v1.1.0/go.mod h1:QfNAHy35nkmI9fAv6shRqh8cGbk/Ecgh+o4J62dYlAI=
+github.com/antinvestor/common v1.2.0 h1:u+bplpwFXRaxBGiFFy0SkmaJlKyr2MAs9r/WZDHqNZU=
+github.com/antinvestor/common v1.2.0/go.mod h1:QfNAHy35nkmI9fAv6shRqh8cGbk/Ecgh+o4J62dYlAI=
 github.com/google/gnostic v0.7.1 h1:t5Kc7j/8kYr8t2u11rykRrPPovlEMG4+xdc/SpekATs=
 github.com/google/gnostic v0.7.1/go.mod h1:KSw6sxnxEBFM8jLPfJd46xZP+yQcfE8XkiqfZx5zR28=
 github.com/google/gnostic-models v0.7.1 h1:SisTfuFKJSKM5CPZkffwi6coztzzeYUhc3v4yxLWH8c=
