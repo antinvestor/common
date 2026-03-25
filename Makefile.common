@@ -30,7 +30,7 @@ DEFAULT_APP      ?= apps/default
 APP_DIRS         ?= apps/default
 BIN              ?= $(abspath .tmp/bin)
 GO               ?= go
-TOOLS_VER        ?= v1.0.1
+TOOLS_VER        ?= v1.1.0
 COPYRIGHT_YEARS  ?= 2023-2026
 COPYRIGHT_HOLDER ?= Ant Investor Ltd
 
