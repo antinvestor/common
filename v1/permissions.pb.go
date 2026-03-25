@@ -343,8 +343,8 @@ const file_common_v1_permissions_proto_rawDesc = "" +
 	"\vROLE_MEMBER\x10\x05\x12\x10\n" +
 	"\fROLE_SERVICE\x10\x06:m\n" +
 	"\x12method_permissions\x12\x1e.google.protobuf.MethodOptions\x18І\x03 \x01(\v2\x1c.common.v1.MethodPermissionsR\x11methodPermissions:q\n" +
-	"\x13service_permissions\x12\x1f.google.protobuf.ServiceOptions\x18І\x03 \x01(\v2\x1d.common.v1.ServicePermissionsR\x12servicePermissionsB?\n" +
-	"\bcommonv1P\x01Z1github.com/antinvestor/common/v1;commonv1b\x06proto3"
+	"\x13service_permissions\x12\x1f.google.protobuf.ServiceOptions\x18І\x03 \x01(\v2\x1d.common.v1.ServicePermissionsR\x12servicePermissionsB7\n" +
+	"\bcommonv1P\x01Z)github.com/antinvestor/common/v1;commonv1b\x06proto3"
 
 var (
 	file_common_v1_permissions_proto_rawDescOnce sync.Once
