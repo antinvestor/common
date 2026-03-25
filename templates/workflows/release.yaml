@@ -9,3 +9,7 @@ jobs:
     uses: antinvestor/common/.github/workflows/buf-push.yaml@main
     secrets:
       buf_token: ${{ secrets.BUF_TOKEN }}
+  dart-publish:
+    uses: antinvestor/common/.github/workflows/dart-publish.yml@main
+    secrets:
+      pub_credentials: ${{ secrets.PUB_DEV_CREDENTIALS }}

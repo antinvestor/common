@@ -1,7 +1,7 @@
 name: Changelog
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize, reopened]
 jobs:
   changelog:
     uses: antinvestor/common/.github/workflows/changelog.yml@main

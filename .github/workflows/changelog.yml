@@ -1,10 +1,55 @@
-name: Changelog CI
+name: Changelog
 on:
   workflow_call: {}
 
 jobs:
   changelog:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v6
-      - uses: saadmk11/changelog-ci@v1.2.0
+        with:
+          fetch-depth: 0
+
+      - name: Build changelog
+        id: changelog
+        uses: mikepenz/release-changelog-builder-action@v6
+        with:
+          configurationJson: |
+            {
+              "categories": [
+                {"title": "## 🚀 Features", "labels": ["feature", "enhancement"]},
+                {"title": "## 🐛 Bug Fixes", "labels": ["fix", "bugfix", "bug"]},
+                {"title": "## 🧰 Maintenance", "labels": ["chore", "dependencies"]},
+                {"title": "## 📖 Documentation", "labels": ["documentation"]}
+              ],
+              "template": "#{{CHANGELOG}}",
+              "pr_template": "- #{{TITLE}} (#{{NUMBER}}) @#{{AUTHOR}}"
+            }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment changelog on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const body = '### 📋 Changelog Preview\n\n' + `${{ steps.changelog.outputs.changelog }}`;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.startsWith('### 📋 Changelog Preview'));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: existing.id, body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.issue.number, body,
+              });
+            }
