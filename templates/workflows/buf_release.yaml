@@ -1,0 +1,29 @@
+# .github/workflows/buf_release.yaml — Push proto to BSR on version tag
+# Place in .github/workflows/ of service repo
+name: Push proto to BSR
+on:
+  push:
+    tags:
+      - "v*.*.*"
+    paths:
+      - "proto/**"
+
+permissions:
+  contents: write
+
+jobs:
+  buf-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: bufbuild/buf-setup-action@v1
+
+      - name: Push to BSR
+        env:
+          BUF_TOKEN: ${{ secrets.BUF_TOKEN }}
+        run: |
+          cd proto
+          buf dep update
+          buf lint
+          buf push

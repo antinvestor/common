@@ -1,0 +1,22 @@
+# buf.gen.yaml — place in proto/ directory of service repo
+# Replace CHANGEME with the service name and DEFAULT_APP with the app directory
+version: v2
+managed:
+  enabled: true
+
+plugins:
+  # OpenAPI spec generation -> goes to apps/DEFAULT_APP/
+  - remote: buf.build/community/sudorandom-connect-openapi
+    out: ../apps/default
+    opt:
+      - features=connectrpc;gnostic;protovalidate
+      - content-types=json
+      - allow-get
+
+  # Dart protobuf generation -> goes to sdk/dart/CHANGEME/lib/src
+  - remote: buf.build/protocolbuffers/dart:v21.1.2
+    out: ../sdk/dart/CHANGEME/lib/src
+
+  # Dart Connect RPC client generation
+  - remote: buf.build/connectrpc/dart
+    out: ../sdk/dart/CHANGEME/lib/src

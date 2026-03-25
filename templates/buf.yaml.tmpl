@@ -1,0 +1,20 @@
+# buf.yaml — place in proto/ directory of service repo
+# Replace CHANGEME with the service name (e.g., profile, payment)
+version: v2
+name: buf.build/antinvestor/CHANGEME
+deps:
+  - buf.build/pitabwire/common
+  - buf.build/bufbuild/protovalidate
+  - buf.build/gnostic/gnostic
+lint:
+  use:
+    - STANDARD
+  except:
+    - FIELD_NOT_REQUIRED
+    - PACKAGE_NO_IMPORT_CYCLE
+breaking:
+  use:
+    - FILE
+  except:
+    - EXTENSION_NO_DELETE
+    - FIELD_SAME_DEFAULT

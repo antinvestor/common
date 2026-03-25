@@ -1,0 +1,145 @@
+# Standardized service Makefile — copy to service repo and adjust variables below.
+# See https://github.com/pitabwire/common for tooling documentation.
+
+SHELL := bash
+.SHELLFLAGS := -eu -o pipefail -c
+.DEFAULT_GOAL := all
+
+MAKEFLAGS += --warn-undefined-variables
+MAKEFLAGS += --no-builtin-rules
+MAKEFLAGS += --no-print-directory
+
+# ------------------------------------------------------------------------------
+# Service configuration — adjust per repo
+# ------------------------------------------------------------------------------
+
+SERVICE_NAME     := CHANGEME
+PROTO_DIR        := proto
+DEFAULT_APP      := apps/default
+APP_DIRS         := apps/default
+
+# ------------------------------------------------------------------------------
+# Paths & tools
+# ------------------------------------------------------------------------------
+
+BIN              := $(abspath .tmp/bin)
+GO               ?= go
+TOOLS_VER        ?= latest
+COPYRIGHT_YEARS  := 2023-2026
+
+export PATH  := $(BIN):$(PATH)
+export GOBIN := $(BIN)
+
+# ------------------------------------------------------------------------------
+# Tool bootstrap
+# ------------------------------------------------------------------------------
+
+$(BIN)/buf:
+	@mkdir -p $(BIN)
+	$(GO) install github.com/bufbuild/buf/cmd/buf@latest
+
+$(BIN)/license-header:
+	@mkdir -p $(BIN)
+	$(GO) install github.com/bufbuild/buf/private/pkg/licenseheader/cmd/license-header@latest
+
+$(BIN)/golangci-lint:
+	@mkdir -p $(BIN)
+	$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+
+$(BIN)/inject-permissions:
+	@mkdir -p $(BIN)
+	$(GO) install github.com/pitabwire/common/tools/inject-permissions@$(TOOLS_VER)
+
+$(BIN)/generate-opl:
+	@mkdir -p $(BIN)
+	$(GO) install github.com/pitabwire/common/tools/generate-opl@$(TOOLS_VER)
+
+# ------------------------------------------------------------------------------
+# Proto targets
+# ------------------------------------------------------------------------------
+
+.PHONY: proto-lint
+proto-lint: $(BIN)/buf ## Format and lint protobuf
+	cd $(PROTO_DIR) && buf format -w
+	cd $(PROTO_DIR) && buf lint
+
+.PHONY: proto-deps
+proto-deps: $(BIN)/buf ## Update buf dependencies
+	cd $(PROTO_DIR) && buf dep update
+
+.PHONY: proto-generate
+proto-generate: $(BIN)/buf $(BIN)/inject-permissions $(BIN)/generate-opl ## Generate all artifacts from proto
+	@echo "==> buf generate $(SERVICE_NAME)"
+	cd $(PROTO_DIR) && buf dep update && buf generate
+	@# Inject permissions into OpenAPI specs
+	@for app_dir in $(APP_DIRS); do \
+		yaml_files=$$(find $$app_dir -name '*.openapi.yaml' 2>/dev/null); \
+		for yaml_file in $$yaml_files; do \
+			echo "==> inject permissions $$yaml_file"; \
+			buf build $(PROTO_DIR) -o /dev/stdout | \
+				$(BIN)/inject-permissions "$$yaml_file"; \
+		done; \
+	done
+	@# Generate OPL TypeScript
+	@echo "==> generate opl $(SERVICE_NAME)"
+	@buf build $(PROTO_DIR) -o /dev/stdout | $(BIN)/generate-opl $(DEFAULT_APP)
+	@# License headers
+	license-header \
+		--license-type apache \
+		--copyright-holder "Ant Investor Ltd" \
+		--year-range "$(COPYRIGHT_YEARS)" \
+		--ignore /testdata/ --ignore /sdk/
+
+.PHONY: proto-push
+proto-push: $(BIN)/buf ## Push proto to BSR
+	cd $(PROTO_DIR) && buf push
+
+# ------------------------------------------------------------------------------
+# Go targets
+# ------------------------------------------------------------------------------
+
+.PHONY: build
+build: ## Build all app binaries
+	@for app_dir in $(APP_DIRS); do \
+		if [ -d "$$app_dir/cmd" ]; then \
+			echo "==> building $$app_dir"; \
+			$(GO) build ./$$app_dir/cmd/...; \
+		fi; \
+	done
+
+.PHONY: test
+test: ## Run all tests with race detection
+	$(GO) test -vet=off -race -cover ./...
+
+.PHONY: lint
+lint: $(BIN)/golangci-lint ## Lint Go code
+	$(GO) vet ./...
+	golangci-lint run
+
+.PHONY: lintfix
+lintfix: $(BIN)/golangci-lint ## Auto-fix lint issues
+	golangci-lint run --fix
+
+.PHONY: tidy
+tidy: ## Tidy Go modules
+	$(GO) mod tidy
+	$(GO) fmt ./...
+
+# ------------------------------------------------------------------------------
+# Aggregate targets
+# ------------------------------------------------------------------------------
+
+.PHONY: all
+all: proto-lint proto-generate build test lint ## Full pipeline
+
+.PHONY: generate
+generate: proto-generate ## Alias for proto-generate
+
+.PHONY: clean
+clean: ## Delete generated / temporary files
+	rm -rf $(BIN)
+
+.PHONY: help
+help: ## Show this help
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
+	awk 'BEGIN {FS = ":.*?## "}; {printf "%-28s %s\n", $$1, $$2}'
