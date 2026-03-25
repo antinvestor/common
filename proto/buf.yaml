@@ -1,5 +1,5 @@
 version: v2
-name: buf.build/pitabwire/common
+name: buf.build/antinvestor/common
 deps:
   - buf.build/bufbuild/protovalidate
   - buf.build/gnostic/gnostic
