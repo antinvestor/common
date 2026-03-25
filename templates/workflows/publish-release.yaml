@@ -1,0 +1,7 @@
+name: Publish Release
+on:
+  schedule:
+    - cron: "0 0 */5 * *"
+jobs:
+  publish:
+    uses: antinvestor/common/.github/workflows/publish-release.yml@main

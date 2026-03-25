@@ -1,0 +1,22 @@
+# Complete service CI/CD — single file that references all reusable workflows.
+# Copy to .github/workflows/ in your service repo. No changes needed.
+#
+# This replaces 10 separate workflow files with 1 file + 1 buf-release file.
+# Covers: CI, tests, lint, docker release, dependabot, changelog, release drafting.
+
+# ---- CI: build + test + lint on push/PR ----
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  go-test:
+    uses: antinvestor/common/.github/workflows/go-test.yml@main
+  golangci-lint:
+    uses: antinvestor/common/.github/workflows/golangci-lint.yml@main
+  changelog:
+    if: github.event_name == 'pull_request'
+    uses: antinvestor/common/.github/workflows/changelog.yml@main

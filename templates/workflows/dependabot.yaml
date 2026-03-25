@@ -1,0 +1,5 @@
+name: Dependabot Auto-Merge
+on: pull_request
+jobs:
+  auto-merge:
+    uses: antinvestor/common/.github/workflows/dependabot-auto-merge.yml@main

@@ -1,0 +1,71 @@
+name: Release Docker Images
+on:
+  workflow_call: {}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.set-matrix.outputs.apps }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: set-matrix
+        run: |
+          APPS=$(find ./apps -name "Dockerfile" -exec dirname {} \; | sed 's|^\./||' | jq -R -s -c 'split("\n")[:-1]')
+          echo "apps=$APPS" >> $GITHUB_OUTPUT
+
+  build-and-push:
+    needs: build-matrix
+    if: needs.build-matrix.outputs.apps != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: ${{ fromJson(needs.build-matrix.outputs.apps) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: app-name
+        run: |
+          APP_NAME=$(basename ${{ matrix.app }})
+          if [[ "${{ matrix.app }}" == "apps/default" ]]; then
+            IMAGE_NAME=${{ github.repository }}
+          elif [[ "${{ matrix.app }}" == apps/integrations/* ]]; then
+            IMAGE_NAME="${{ github.repository }}-integration-${APP_NAME}"
+          else
+            IMAGE_NAME="${{ github.repository }}-${APP_NAME}"
+          fi
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ env.IMAGE_NAME }}
+          flavor: latest=true
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{raw}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+            type=sha,format=long
+      - uses: docker/build-push-action@v7
+        with:
+          context: ./
+          file: ./${{ matrix.app }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILDTIME=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+            VERSION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.version'] }}
+            REVISION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.revision'] }}
+            REPOSITORY=https://github.com/${{ github.repository }}
