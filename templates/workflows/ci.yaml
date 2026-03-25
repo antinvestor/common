@@ -1,3 +1,4 @@
+# Unified CI — handles both Go backend and Flutter UI (auto-detected)
 name: CI
 on:
   push:
@@ -9,3 +10,5 @@ jobs:
     uses: antinvestor/common/.github/workflows/go-test.yml@main
   lint:
     uses: antinvestor/common/.github/workflows/golangci-lint.yml@main
+  flutter:
+    uses: antinvestor/common/.github/workflows/flutter-ci.yml@main

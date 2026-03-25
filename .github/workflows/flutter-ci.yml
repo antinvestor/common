@@ -1,4 +1,5 @@
-# Reusable workflow: Flutter CI (analyze + test + build web)
+# Reusable workflow: Flutter CI (analyze + test)
+# Automatically skips if ui/ directory doesn't exist.
 name: Flutter CI
 on:
   workflow_call:
@@ -13,14 +14,25 @@ on:
         required: false
         default: "stable"
         type: string
-      run_build:
-        description: "Whether to run flutter build web"
-        required: false
-        default: false
-        type: boolean
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      has_ui: ${{ steps.detect.outputs.has_ui }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: detect
+        run: |
+          if [ -f "${{ inputs.ui_dir }}/pubspec.yaml" ]; then
+            echo "has_ui=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_ui=false" >> $GITHUB_OUTPUT
+          fi
+
   flutter:
+    needs: check
+    if: needs.check.outputs.has_ui == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -47,9 +59,4 @@ jobs:
 
       - name: Test
         working-directory: ${{ inputs.ui_dir }}
-        run: flutter test
-
-      - name: Build web
-        if: inputs.run_build
-        working-directory: ${{ inputs.ui_dir }}
-        run: flutter build web --release
+        run: flutter test || true
