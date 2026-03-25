@@ -1,0 +1,47 @@
+# Reusable workflow: Push proto to BSR
+# Call from service repos:
+#
+#   jobs:
+#     buf-push:
+#       uses: antinvestor/common/.github/workflows/buf-push.yaml@main
+#       with:
+#         proto_dir: proto
+#       secrets:
+#         buf_token: ${{ secrets.BUF_TOKEN }}
+#
+name: Push proto to BSR
+
+on:
+  workflow_call:
+    inputs:
+      proto_dir:
+        description: "Path to proto directory"
+        required: false
+        default: "proto"
+        type: string
+    secrets:
+      buf_token:
+        description: "Buf Schema Registry token"
+        required: true
+
+jobs:
+  buf-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: bufbuild/buf-setup-action@v1
+
+      - name: Lint
+        run: |
+          cd ${{ inputs.proto_dir }}
+          buf format -d --exit-code
+          buf lint
+
+      - name: Push to BSR
+        env:
+          BUF_TOKEN: ${{ secrets.buf_token }}
+        run: |
+          cd ${{ inputs.proto_dir }}
+          buf dep update
+          buf push

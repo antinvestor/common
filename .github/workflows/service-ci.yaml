@@ -1,0 +1,68 @@
+# Reusable workflow: Service CI (build + test + lint)
+# Call from service repos:
+#
+#   jobs:
+#     ci:
+#       uses: antinvestor/common/.github/workflows/service-ci.yaml@main
+#       with:
+#         app_dirs: "apps/default apps/devices"
+#
+name: Service CI
+
+on:
+  workflow_call:
+    inputs:
+      app_dirs:
+        description: "Space-separated list of app directories to build"
+        required: false
+        default: "apps/default"
+        type: string
+      go_version:
+        description: "Go version to use"
+        required: false
+        default: "stable"
+        type: string
+      proto_dir:
+        description: "Path to proto directory"
+        required: false
+        default: "proto"
+        type: string
+      run_proto_lint:
+        description: "Whether to lint protos"
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  proto-lint:
+    if: inputs.run_proto_lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: bufbuild/buf-setup-action@v1
+      - run: cd ${{ inputs.proto_dir }} && buf lint
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go_version }}
+          go-version-file: go.mod
+
+      - name: Build
+        run: |
+          for app_dir in ${{ inputs.app_dirs }}; do
+            if [ -d "$app_dir/cmd" ]; then
+              echo "==> building $app_dir"
+              go build ./$app_dir/cmd/...
+            fi
+          done
+
+      - name: Test
+        run: go test -vet=off -race -cover ./...
+
+      - name: Vet
+        run: go vet ./...
