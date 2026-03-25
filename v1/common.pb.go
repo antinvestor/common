@@ -781,7 +781,7 @@ const file_common_v1_common_proto_rawDesc = "" +
 	"\fCommon Types\x12\xd8\x02The Common Types library provides shared data structures, enumerations, and utility messages used across all Ant Investor API services. This includes standard state and status enums, pagination helpers, search request patterns, and contact linking structures. These types ensure consistency and interoperability across the entire API ecosystem.\"M\n" +
 	"\x10Ant Investor Ltd\x12#https://github.com/antinvestor/apis\x1a\x14info@antinvestor.com*I\n" +
 	"\x0eApache License\x127https://github.com/antinvestor/apis/blob/master/LICENSE2\x06v1.0.0\n" +
-	"\bcommonv1P\x01Z1github.com/pitabwire/common/v1;commonv1\xf8\x01\x01b\x06proto3"
+	"\bcommonv1P\x01Z1github.com/antinvestor/common/v1;commonv1\xf8\x01\x01b\x06proto3"
 
 var (
 	file_common_v1_common_proto_rawDescOnce sync.Once

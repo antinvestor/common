@@ -20,7 +20,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/pitabwire/common"
+	"github.com/antinvestor/common"
 )
 
 // sizeEstimateMultiplier is a heuristic multiplier for estimating buffer size.

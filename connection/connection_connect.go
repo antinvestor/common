@@ -21,9 +21,9 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/pitabwire/common"
-	"github.com/pitabwire/common/connection/options"
-	"github.com/pitabwire/common/interceptors"
+	"github.com/antinvestor/common"
+	"github.com/antinvestor/common/connection/options"
+	"github.com/antinvestor/common/interceptors"
 	"github.com/pitabwire/util"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/oauth2"

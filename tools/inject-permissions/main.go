@@ -30,7 +30,7 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 	"gopkg.in/yaml.v3"
 
-	commonv1 "github.com/pitabwire/common/v1"
+	commonv1 "github.com/antinvestor/common/v1"
 )
 
 func main() {

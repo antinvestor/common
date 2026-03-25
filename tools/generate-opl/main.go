@@ -32,7 +32,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	commonv1 "github.com/pitabwire/common/v1"
+	commonv1 "github.com/antinvestor/common/v1"
 )
 
 // Standard role names matching the StandardRole enum.

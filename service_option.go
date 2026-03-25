@@ -22,7 +22,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/pitabwire/common/connection/options"
+	"github.com/antinvestor/common/connection/options"
 )
 
 const (

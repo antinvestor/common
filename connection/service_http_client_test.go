@@ -18,9 +18,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pitabwire/common"
-	commonconnection "github.com/pitabwire/common/connection"
-	"github.com/pitabwire/common/connection/options"
+	"github.com/antinvestor/common"
+	commonconnection "github.com/antinvestor/common/connection"
+	"github.com/antinvestor/common/connection/options"
 	"github.com/stretchr/testify/suite"
 )
 

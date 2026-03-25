@@ -20,7 +20,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/pitabwire/common/connection/options"
+	"github.com/antinvestor/common/connection/options"
 	"google.golang.org/grpc"
 
 	"golang.org/x/oauth2"

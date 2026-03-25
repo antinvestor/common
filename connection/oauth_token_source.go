@@ -34,7 +34,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pitabwire/common"
+	"github.com/antinvestor/common"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	"github.com/spiffe/go-spiffe/v2/workloadapi"

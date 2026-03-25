@@ -18,8 +18,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pitabwire/common"
-	"github.com/pitabwire/common/connection/options"
+	"github.com/antinvestor/common"
+	"github.com/antinvestor/common/connection/options"
 	"github.com/stretchr/testify/suite"
 )
 

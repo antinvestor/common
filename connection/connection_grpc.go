@@ -22,7 +22,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pitabwire/common"
+	"github.com/antinvestor/common"
 	"github.com/pitabwire/util"
 	"golang.org/x/oauth2"
 

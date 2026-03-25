@@ -1,10 +1,10 @@
-module github.com/pitabwire/common/tools/generate-opl
+module github.com/antinvestor/common/tools/generate-opl
 
 go 1.26.1
 
 
 require (
-	github.com/pitabwire/common v1.0.0
+	github.com/antinvestor/common v1.0.0
 	google.golang.org/protobuf v1.36.11
 )
 

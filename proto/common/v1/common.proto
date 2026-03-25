@@ -29,7 +29,7 @@ import "gnostic/openapi/v3/annotations.proto";
 import "google/protobuf/struct.proto";
 
 option cc_enable_arenas = true;
-option go_package = "github.com/pitabwire/common/v1;commonv1";
+option go_package = "github.com/antinvestor/common/v1;commonv1";
 option java_multiple_files = true;
 option java_package = "commonv1";
 option (gnostic.openapi.v3.document) = {

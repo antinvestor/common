@@ -1,4 +1,4 @@
-module github.com/pitabwire/common
+module github.com/antinvestor/common
 
 go 1.26
 

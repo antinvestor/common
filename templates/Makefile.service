@@ -1,5 +1,5 @@
 # Standardized service Makefile — copy to service repo and adjust variables below.
-# See https://github.com/pitabwire/common for tooling documentation.
+# See https://github.com/antinvestor/common for tooling documentation.
 
 SHELL := bash
 .SHELLFLAGS := -eu -o pipefail -c
@@ -48,11 +48,11 @@ $(BIN)/golangci-lint:
 
 $(BIN)/inject-permissions:
 	@mkdir -p $(BIN)
-	$(GO) install github.com/pitabwire/common/tools/inject-permissions@$(TOOLS_VER)
+	$(GO) install github.com/antinvestor/common/tools/inject-permissions@$(TOOLS_VER)
 
 $(BIN)/generate-opl:
 	@mkdir -p $(BIN)
-	$(GO) install github.com/pitabwire/common/tools/generate-opl@$(TOOLS_VER)
+	$(GO) install github.com/antinvestor/common/tools/generate-opl@$(TOOLS_VER)
 
 # ------------------------------------------------------------------------------
 # Proto targets

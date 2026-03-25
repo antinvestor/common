@@ -18,7 +18,7 @@ import (
 	"crypto/tls"
 	"net/http"
 
-	"github.com/pitabwire/common/connection/options"
+	"github.com/antinvestor/common/connection/options"
 	"golang.org/x/oauth2"
 	"google.golang.org/grpc"
 )
