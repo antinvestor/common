@@ -22,7 +22,7 @@ package commonv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	_ "github.com/google/gnostic/openapiv3"
+	_ "buf.build/gen/go/gnostic/gnostic/protocolbuffers/go/gnostic/openapi/v3"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
