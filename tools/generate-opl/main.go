@@ -105,8 +105,8 @@ func generateOPL(sp *commonv1.ServicePermissions) string {
 	b.WriteString("class profile_user implements Namespace {}\n\n")
 	b.WriteString("class tenancy_access implements Namespace {\n")
 	b.WriteString("  related: {\n")
-	b.WriteString("    member: (profile_user | tenancy_access)[]\n")
-	b.WriteString("    service: profile_user[]\n")
+	b.WriteString("    member: (profile_user | SubjectSet<tenancy_access, \"member\">)[]\n")
+	b.WriteString("    service: (profile_user | SubjectSet<tenancy_access, \"service\">)[]\n")
 	b.WriteString("  }\n")
 	b.WriteString("}\n\n")
 
