@@ -1,0 +1,9 @@
+name: Release
+on:
+  push:
+    tags: ["v*.*.*"]
+jobs:
+  dart-publish:
+    uses: antinvestor/common/.github/workflows/dart-publish.yml@main
+    secrets:
+      pub_credentials: ${{ secrets.PUB_DEV_CREDENTIALS }}
