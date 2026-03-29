@@ -1,0 +1,35 @@
+name: Publish Dart SDK to pub.dev
+on:
+  push:
+    tags:
+      - 'dart/*/v[0-9]+.[0-9]+.[0-9]+*'
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      package: ${{ steps.extract.outputs.package }}
+      working_dir: ${{ steps.extract.outputs.working_dir }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: extract
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          # Tag format: dart/{package}/v{version}
+          PACKAGE=$(echo "$TAG" | cut -d'/' -f2)
+          DIR="sdk/dart/$PACKAGE"
+          if [ ! -f "$DIR/pubspec.yaml" ]; then
+            echo "No pubspec.yaml found at $DIR for tag $TAG"
+            exit 1
+          fi
+          echo "package=$PACKAGE" >> $GITHUB_OUTPUT
+          echo "working_dir=$DIR" >> $GITHUB_OUTPUT
+          echo "Publishing $PACKAGE from $DIR (tag: $TAG)"
+
+  publish:
+    needs: resolve
+    permissions:
+      id-token: write
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@v1
+    with:
+      working-directory: ${{ needs.resolve.outputs.working_dir }}
