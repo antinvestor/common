@@ -18,7 +18,7 @@
 //
 // Usage:
 //
-//	buf build proto/profile -o /dev/stdout | generate-opl opl/
+//	buf build proto/profile -o /dev/stdout | generate-opl opl/profile/
 package main
 
 import (
