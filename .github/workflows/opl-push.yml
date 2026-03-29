@@ -5,8 +5,6 @@
 #   jobs:
 #     opl:
 #       uses: antinvestor/common/.github/workflows/opl-push.yml@main
-#       with:
-#         opl_source: apps/default
 #       secrets:
 #         deploy_token: ${{ secrets.DEPLOY_REPO_TOKEN }}
 #
@@ -15,9 +13,9 @@ on:
   workflow_call:
     inputs:
       opl_source:
-        description: "Directory containing .opl.ts files"
+        description: "Directory containing .opl.ts files (standard: opl/)"
         required: false
-        default: "apps/default"
+        default: "opl"
         type: string
       deploy_repo:
         description: "Deployments repository"
