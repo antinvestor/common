@@ -165,7 +165,7 @@ func (t *loggingTransport) logRequest(ctx context.Context, req *http.Request) {
 		}
 	}
 
-	logger.Info("HTTP request sent")
+	logger.Debug("HTTP request sent")
 }
 
 func (t *loggingTransport) logResponse(ctx context.Context, resp *http.Response, err error, duration time.Duration) {
@@ -173,9 +173,7 @@ func (t *loggingTransport) logResponse(ctx context.Context, resp *http.Response,
 		return
 	}
 
-	logger := util.Log(ctx).WithFields(map[string]any{
-		"duration": duration.String(),
-	})
+	logger := util.Log(ctx).WithField("duration_ms", duration.Milliseconds())
 
 	if err != nil {
 		logger.WithError(err).Error("HTTP request failed")
@@ -183,13 +181,13 @@ func (t *loggingTransport) logResponse(ctx context.Context, resp *http.Response,
 	}
 
 	if resp == nil {
-		logger.Info("HTTP response received")
+		logger.Debug("HTTP response received")
 		return
 	}
 
 	logger = logger.WithFields(map[string]any{
-		"status":     resp.StatusCode,
-		"statusText": http.StatusText(resp.StatusCode),
+		"status":      resp.StatusCode,
+		"status_text": http.StatusText(resp.StatusCode),
 	})
 
 	if t.logHeaders {
@@ -212,7 +210,13 @@ func (t *loggingTransport) logResponse(ctx context.Context, resp *http.Response,
 		}
 	}
 
-	logger.Info("HTTP response received")
+	if resp.StatusCode >= http.StatusInternalServerError {
+		logger.Error("HTTP response received")
+	} else if resp.StatusCode >= http.StatusBadRequest {
+		logger.Warn("HTTP response received")
+	} else {
+		logger.Debug("HTTP response received")
+	}
 }
 
 // WrapClient wraps an existing HTTP client with logging transport.

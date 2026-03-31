@@ -16,7 +16,6 @@ package interceptors
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"connectrpc.com/connect"
@@ -80,7 +79,7 @@ func (l *loggingInterceptor) logRequest(ctx context.Context, req connect.AnyRequ
 	logger := util.Log(ctx).WithFields(map[string]any{
 		"procedure": req.Spec().Procedure,
 		"method":    req.HTTPMethod(),
-		"isClient":  req.Spec().IsClient,
+		"is_client": req.Spec().IsClient,
 	})
 
 	if l.logHeaders {
@@ -93,18 +92,13 @@ func (l *loggingInterceptor) logRequest(ctx context.Context, req connect.AnyRequ
 		logger = logger.WithField("headers", headers)
 	}
 
-	// Log request message if available
-	if req.Any() != nil {
-		logger.Info("Request received", "message", fmt.Sprintf("%+v", req.Any()))
-	} else {
-		logger.Info("Request received")
-	}
+	logger.Debug("request received")
 }
 
 func (l *loggingInterceptor) logResponse(
 	ctx context.Context,
 	req connect.AnyRequest,
-	resp connect.AnyResponse,
+	_ connect.AnyResponse,
 	err error,
 	duration time.Duration,
 ) {
@@ -113,21 +107,25 @@ func (l *loggingInterceptor) logResponse(
 	}
 
 	logger := util.Log(ctx).WithFields(map[string]any{
-		"procedure": req.Spec().Procedure,
-		"duration":  duration.String(),
-		"isClient":  req.Spec().IsClient})
+		"procedure":   req.Spec().Procedure,
+		"duration_ms": duration.Milliseconds(),
+		"is_client":   req.Spec().IsClient,
+	})
 
 	if err != nil {
-		logger.WithError(err).Error("Request failed")
+		code := connect.CodeOf(err)
+		logger = logger.WithField("error_code", code.String())
+		switch {
+		case code == connect.CodeInternal || code == connect.CodeUnavailable ||
+			code == connect.CodeDataLoss || code == connect.CodeUnknown:
+			logger.WithError(err).Error("request failed")
+		default:
+			logger.WithError(err).Warn("request failed")
+		}
 		return
 	}
 
-	// Log response message if available
-	if resp.Any() != nil {
-		logger.Info("Response sent", "message", fmt.Sprintf("%+v", resp.Any()))
-	} else {
-		logger.Info("Response sent")
-	}
+	logger.Debug("request completed")
 }
 
 func (l *loggingInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
@@ -152,16 +150,15 @@ func (l *loggingInterceptor) WrapStreamingClient(next connect.StreamingClientFun
 	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
 		start := time.Now()
 
-		// Log the streaming request
 		logger := util.Log(ctx).WithFields(map[string]any{
 			"procedure": spec.Procedure,
-			"isClient":  true,
-			"streaming": true})
-		logger.Info("Streaming client request started")
+			"is_client": true,
+			"streaming": true,
+		})
+		logger.Debug("streaming client request started")
 
 		conn := next(ctx, spec)
 
-		// Wrap the connection to log when streaming completes
 		return &loggingClientConn{
 			StreamingClientConn: conn,
 			logger:              logger,
@@ -174,21 +171,20 @@ func (l *loggingInterceptor) WrapStreamingHandler(next connect.StreamingHandlerF
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
 		start := time.Now()
 
-		// Log the streaming request
 		logger := util.Log(ctx).WithFields(map[string]any{
 			"procedure": conn.Spec().Procedure,
-			"isClient":  false,
-			"streaming": true})
-		logger.Info("Streaming handler request started")
+			"is_client": false,
+			"streaming": true,
+		})
 
 		err := next(ctx, conn)
 
-		// Log completion
 		duration := time.Since(start)
+		logger = logger.WithField("duration_ms", duration.Milliseconds())
 		if err != nil {
-			logger.WithError(err).Error("Streaming handler request failed", "duration", duration.String())
+			logger.WithError(err).Error("streaming handler request failed")
 		} else {
-			logger.Info("Streaming handler request completed", "duration", duration.String())
+			logger.Debug("streaming handler request completed")
 		}
 
 		return err
@@ -206,10 +202,11 @@ func (l *loggingClientConn) CloseRequest() error {
 	err := l.StreamingClientConn.CloseRequest()
 	duration := time.Since(l.start)
 
+	logger := l.logger.WithField("duration_ms", duration.Milliseconds())
 	if err != nil {
-		l.logger.WithError(err).Error("Streaming client request failed", "duration", duration.String())
+		logger.WithError(err).Error("streaming client request failed")
 	} else {
-		l.logger.Info("Streaming client request completed", "duration", duration.String())
+		logger.Debug("streaming client request completed")
 	}
 
 	return err
