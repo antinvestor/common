@@ -62,7 +62,7 @@ message MethodPermissions {
 message ServicePermissions {
   // Namespace for this service's permissions, used for OPL namespace generation
   // and ensuring consistency across authorization systems.
-  // e.g. "service_profile", "service_payment", "service_partition".
+  // e.g. "service_profile", "service_payment", "service_tenancy".
   string namespace = 1;
 
   // All permissions this service needs, e.g. "profile_view", "profile_create".

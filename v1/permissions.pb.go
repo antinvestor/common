@@ -220,7 +220,7 @@ type ServicePermissions struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Namespace for this service's permissions, used for OPL namespace generation
 	// and ensuring consistency across authorization systems.
-	// e.g. "service_profile", "service_payment", "service_partition".
+	// e.g. "service_profile", "service_payment", "service_tenancy".
 	Namespace string `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	// All permissions this service needs, e.g. "profile_view", "profile_create".
 	Permissions []string `protobuf:"bytes,2,rep,name=permissions,proto3" json:"permissions,omitempty"`
