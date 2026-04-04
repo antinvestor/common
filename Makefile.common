@@ -17,6 +17,9 @@
 #   BIN           — tool binary directory (default: .tmp/bin)
 #   HAS_UI        — set to true to enable Flutter UI targets (default: false)
 #   UI_DIR        — Flutter UI directory (default: ui)
+#   FLUTTER_HOME  — Flutter SDK location (default: $HOME/flutter)
+#   OIDC_CLIENT_ID — OAuth client ID passed via --dart-define (default: empty)
+#   OIDC_ISSUER    — OAuth issuer URL passed via --dart-define (default: empty)
 
 SHELL := bash
 .SHELLFLAGS := -eu -o pipefail -c
@@ -154,59 +157,73 @@ tidy: ## Tidy Go modules
 
 ifeq ($(HAS_UI),true)
 
-FLUTTER_CHANNEL  ?= stable
-BFF_BASE_URL     ?= http://localhost:8080
-OIDC_CLIENT_ID   ?= ""
-OIDC_ISSUER      ?= ""
+FLUTTER_HOME   ?= $(HOME)/flutter
+FLUTTER        := $(FLUTTER_HOME)/bin/flutter
+DART           := $(FLUTTER_HOME)/bin/dart
+OIDC_CLIENT_ID ?=
+OIDC_ISSUER    ?=
 
-.PHONY: flutter-setup
-flutter-setup: ## Install Flutter SDK if not present
-	@if command -v flutter >/dev/null 2>&1; then \
-		echo "Flutter: $$(flutter --version | head -1)"; \
+# Build the --dart-define flags only when the variables are non-empty
+_DART_DEFINES :=
+ifneq ($(strip $(OIDC_CLIENT_ID)),)
+  _DART_DEFINES += --dart-define=OIDC_CLIENT_ID=$(OIDC_CLIENT_ID)
+endif
+ifneq ($(strip $(OIDC_ISSUER)),)
+  _DART_DEFINES += --dart-define=OIDC_ISSUER=$(OIDC_ISSUER)
+endif
+
+.PHONY: flutter-install
+flutter-install: ## Download and install Flutter SDK (stable) if not present
+	@if [ -x "$(FLUTTER)" ]; then \
+		echo "Flutter already installed: $$("$(FLUTTER)" --version | head -1)"; \
 	else \
-		echo "Flutter not found — install from https://flutter.dev/docs/get-started/install"; \
-		exit 1; \
+		echo "==> Installing Flutter SDK (stable)..."; \
+		FLUTTER_URL=$$(curl -s https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json \
+			| python3 -c "import json,sys; r=json.load(sys.stdin); print('https://storage.googleapis.com/flutter_infra_release/releases/' + [x for x in r['releases'] if x['hash']==r['current_release']['stable']][0]['archive'])"); \
+		echo "Downloading $$FLUTTER_URL"; \
+		curl -sL "$$FLUTTER_URL" | tar xJ -C "$(dir $(FLUTTER_HOME))"; \
+		"$(FLUTTER)" precache --web; \
+		echo "Flutter installed: $$("$(FLUTTER)" --version | head -1)"; \
 	fi
 
+# Keep flutter-setup as an alias for backward compatibility
+.PHONY: flutter-setup
+flutter-setup: flutter-install
+
 .PHONY: ui-deps
-ui-deps: flutter-setup ## Install Flutter dependencies
-	cd $(UI_DIR) && flutter pub get
+ui-deps: flutter-install ## Install Flutter dependencies
+	cd $(UI_DIR) && "$(FLUTTER)" pub get
 
 .PHONY: ui-generate
 ui-generate: ui-deps ## Run build_runner code generation
 	@if grep -q 'build_runner' $(UI_DIR)/pubspec.yaml 2>/dev/null; then \
-		cd $(UI_DIR) && dart run build_runner build --delete-conflicting-outputs; \
+		cd $(UI_DIR) && "$(DART)" run build_runner build --delete-conflicting-outputs; \
 	fi
 
 .PHONY: ui-analyze
 ui-analyze: ui-deps ## Analyze Flutter code
-	cd $(UI_DIR) && flutter analyze --no-fatal-infos
+	cd $(UI_DIR) && "$(FLUTTER)" analyze
 
 .PHONY: ui-test
 ui-test: ui-generate ## Run Flutter tests
-	cd $(UI_DIR) && flutter test
+	cd $(UI_DIR) && "$(FLUTTER)" test
 
 .PHONY: ui-build-dev
 ui-build-dev: ui-generate ## Build Flutter web (development)
-	cd $(UI_DIR) && flutter build web \
+	cd $(UI_DIR) && "$(FLUTTER)" build web \
 		--profile \
 		--base-href="/" \
-		--dart-define=BFF_BASE_URL=$(BFF_BASE_URL) \
-		--dart-define=OIDC_CLIENT_ID=$(OIDC_CLIENT_ID) \
-		--dart-define=OIDC_ISSUER=$(OIDC_ISSUER) \
+		$(_DART_DEFINES) \
 		--source-maps
 	@echo "Dev build: $(UI_DIR)/build/web/"
 
 .PHONY: ui-build-prod
 ui-build-prod: ui-generate ## Build Flutter web (production)
-	cd $(UI_DIR) && flutter build web \
+	cd $(UI_DIR) && "$(FLUTTER)" build web \
 		--release \
 		--base-href="/" \
 		--tree-shake-icons \
-		--dart-define=BFF_BASE_URL=$(BFF_BASE_URL) \
-		--dart-define=OIDC_CLIENT_ID=$(OIDC_CLIENT_ID) \
-		--dart-define=OIDC_ISSUER=$(OIDC_ISSUER) \
-		--dart-define=ENV=production
+		$(_DART_DEFINES)
 	@echo "Production build: $(UI_DIR)/build/web/"
 
 .PHONY: ui-build
@@ -214,7 +231,7 @@ ui-build: ui-build-dev ## Default UI build (development)
 
 .PHONY: ui-clean
 ui-clean: ## Clean Flutter build artifacts
-	cd $(UI_DIR) && flutter clean
+	cd $(UI_DIR) && "$(FLUTTER)" clean
 	rm -rf $(UI_DIR)/build
 
 endif # HAS_UI
