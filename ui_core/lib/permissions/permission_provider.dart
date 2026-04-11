@@ -9,7 +9,7 @@ final userPermissionsProvider = FutureProvider<Set<String>>((ref) async {
 
 /// Check if user has a specific permission.
 final hasPermissionProvider = Provider.family<bool, String>((ref, permission) {
-  final permissions = ref.watch(userPermissionsProvider).valueOrNull ?? {};
+  final permissions = ref.watch(userPermissionsProvider).value ?? {};
   return permissions.contains(permission);
 });
 
@@ -17,7 +17,7 @@ final hasPermissionProvider = Provider.family<bool, String>((ref, permission) {
 final hasAnyPermissionProvider =
     Provider.family<bool, Set<String>>((ref, required) {
   if (required.isEmpty) return true; // No permissions required = allow all
-  final permissions = ref.watch(userPermissionsProvider).valueOrNull ?? {};
+  final permissions = ref.watch(userPermissionsProvider).value ?? {};
   return permissions.intersection(required).isNotEmpty;
 });
 
@@ -25,6 +25,6 @@ final hasAnyPermissionProvider =
 final hasAllPermissionsProvider =
     Provider.family<bool, Set<String>>((ref, required) {
   if (required.isEmpty) return true;
-  final permissions = ref.watch(userPermissionsProvider).valueOrNull ?? {};
+  final permissions = ref.watch(userPermissionsProvider).value ?? {};
   return required.every(permissions.contains);
 });

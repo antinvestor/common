@@ -127,6 +127,6 @@ class TenancyContext extends ChangeNotifier {
   }
 }
 
-final tenancyContextProvider = ChangeNotifierProvider<TenancyContext>((ref) {
+final tenancyContextProvider = Provider<TenancyContext>((ref) {
   return TenancyContext();
 });

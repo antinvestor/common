@@ -37,6 +37,6 @@ class SidebarExpansionState extends ChangeNotifier {
   }
 }
 
-final sidebarExpansionProvider = ChangeNotifierProvider<SidebarExpansionState>(
+final sidebarExpansionProvider = Provider<SidebarExpansionState>(
   (ref) => SidebarExpansionState(),
 );

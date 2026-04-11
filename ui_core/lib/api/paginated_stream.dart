@@ -74,7 +74,7 @@ class PaginatedStreamController<R, T> {
   /// Start the stream and load the first page.
   Future<void> loadFirstPage() async {
     _updateState(
-      const PaginatedState<T>().copyWith(isLoading: true, clearError: true),
+      PaginatedState<T>().copyWith(isLoading: true, clearError: true),
     );
     _pagesLoaded = 0;
     _streamExhausted = false;
