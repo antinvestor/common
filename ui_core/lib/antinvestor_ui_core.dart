@@ -58,3 +58,14 @@ export 'config/url_strategy.dart';
 
 // Logging
 export 'logging/app_logger.dart';
+
+// Analytics
+export 'analytics/analytics_models.dart';
+export 'analytics/analytics_provider.dart';
+export 'analytics/analytics_dashboard.dart';
+export 'analytics/metric_card.dart';
+export 'analytics/metrics_row.dart';
+export 'analytics/time_series_chart.dart';
+export 'analytics/distribution_chart.dart';
+export 'analytics/top_n_list.dart';
+export 'analytics/time_range_selector.dart';
