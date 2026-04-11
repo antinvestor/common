@@ -10,6 +10,7 @@ class NavItem {
     this.route,
     this.children = const [],
     this.requiredRoles = const {},
+    this.requiredPermissions = const {},
     this.badge,
   });
 
@@ -20,6 +21,10 @@ class NavItem {
   final String? route;
   final List<NavItem> children;
   final Set<String> requiredRoles;
+
+  /// Proto-defined permission keys required to see this item.
+  /// If non-empty, the user must have at least one of these permissions.
+  final Set<String> requiredPermissions;
   final String? badge;
 
   bool get hasChildren => children.isNotEmpty;
@@ -52,6 +57,37 @@ class NavItem {
       route: route,
       children: filteredChildren,
       requiredRoles: requiredRoles,
+      requiredPermissions: requiredPermissions,
+      badge: badge,
+    );
+  }
+
+  /// Filter this item and its children by proto-defined permissions.
+  /// Returns null if the user lacks the required permissions.
+  NavItem? filterByPermissions(Set<String> userPermissions) {
+    if (requiredPermissions.isNotEmpty &&
+        userPermissions.intersection(requiredPermissions).isEmpty) {
+      return null;
+    }
+
+    final filteredChildren = children
+        .map((c) => c.filterByPermissions(userPermissions))
+        .whereType<NavItem>()
+        .toList();
+
+    if (route == null && filteredChildren.isEmpty && children.isNotEmpty) {
+      return null;
+    }
+
+    return NavItem(
+      id: id,
+      label: label,
+      icon: icon,
+      activeIcon: activeIcon,
+      route: route,
+      children: filteredChildren,
+      requiredRoles: requiredRoles,
+      requiredPermissions: requiredPermissions,
       badge: badge,
     );
   }

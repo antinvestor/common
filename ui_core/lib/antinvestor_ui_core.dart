@@ -45,6 +45,12 @@ export 'navigation/nav_state.dart';
 export 'navigation/app_shell.dart';
 export 'navigation/app_sidebar.dart';
 
+// Permissions
+export 'permissions/permission_manifest.dart';
+export 'permissions/permission_provider.dart';
+export 'permissions/permission_guard.dart';
+export 'permissions/permission_registry.dart';
+
 // Routing
 export 'routing/route_module.dart';
 

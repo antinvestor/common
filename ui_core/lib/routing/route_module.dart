@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
 
 import 'package:antinvestor_ui_core/navigation/nav_items.dart';
+import 'package:antinvestor_ui_core/permissions/permission_manifest.dart';
 
 /// Abstract base for service UI modules that contribute routes and
 /// navigation items to a host application.
@@ -26,4 +27,8 @@ abstract class RouteModule {
   /// Route permission map. Keys are route prefixes, values are
   /// sets of role strings required to access that route.
   Map<String, Set<String>> get routePermissions;
+
+  /// Permission manifest declaring all proto-defined permissions this
+  /// module uses. Override to declare granular permissions for batch checking.
+  PermissionManifest? get permissionManifest => null;
 }
