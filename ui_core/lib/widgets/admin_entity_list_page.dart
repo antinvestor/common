@@ -71,6 +71,7 @@ class AdminEntityListPage<T> extends StatefulWidget {
     this.editValuesExtractor,
     this.onSave,
     this.auditTrailBuilder,
+    this.onExport,
   });
 
   final String title;
@@ -93,6 +94,12 @@ class AdminEntityListPage<T> extends StatefulWidget {
   /// Extract a row of string values for CSV export. Column order should
   /// match [columns]. When null, the export button is hidden.
   final List<String> Function(T item)? exportRow;
+
+  /// Called when data is exported, for audit trail logging.
+  /// Receives the export format ('csv'), the number of rows exported,
+  /// and the entity type name (from [title]).
+  /// Callers should use this to create an audit entry in their backend.
+  final void Function(String format, int rowCount)? onExport;
 
   /// Number of rows per page in the paginated table. Defaults to 25.
   final int rowsPerPage;
@@ -143,6 +150,10 @@ class _AdminEntityListPageState<T> extends State<AdminEntityListPage<T>> {
     final csv = const CsvEncoder().convert([headers, ...rows]);
     // Copy to clipboard and show snackbar (works on all platforms)
     Clipboard.setData(ClipboardData(text: csv));
+
+    // Fire audit callback so the host app can log the export event
+    widget.onExport?.call('csv', rows.length);
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
