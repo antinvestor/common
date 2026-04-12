@@ -2,7 +2,7 @@ name: antinvestor_ui_core
 description: >
   Shared Stitch design system and infrastructure for Antinvestor service UIs.
   Theme, widgets, auth, navigation, API helpers, and routing composition.
-version: 0.1.0
+version: 0.1.1
 repository: https://github.com/antinvestor/common
 homepage: https://github.com/antinvestor/common/tree/main/ui_core
 issue_tracker: https://github.com/antinvestor/common/issues
@@ -22,17 +22,17 @@ dependencies:
   flutter_web_plugins:
     sdk: flutter
   antinvestor_api_common: ^1.52.0
-  connectivity_plus: ^7.0.0
+  connectivity_plus: ^7.1.1
   csv: ^8.0.0
   connectrpc: ^1.0.0
   fixnum: ^1.1.0
-  flutter_riverpod: ^3.2.1
+  flutter_riverpod: ^3.3.1
   flutter_secure_storage: ^10.0.0
   geocoding: ^4.0.0
   geolocator: ^14.0.2
-  go_router: ^17.1.0
-  google_fonts: ">=6.2.1 <9.0.0"
-  http: ^1.3.0
+  go_router: ^17.2.0
+  google_fonts: ^8.0.2
+  http: ^1.6.0
   logger: ^2.7.0
   protobuf: ^4.2.0
   riverpod_annotation: ^4.0.2
