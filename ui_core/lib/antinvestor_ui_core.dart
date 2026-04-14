@@ -44,6 +44,7 @@ export 'navigation/nav_items.dart';
 export 'navigation/nav_state.dart';
 export 'navigation/app_shell.dart';
 export 'navigation/app_sidebar.dart';
+export 'navigation/global_search_provider.dart';
 
 // Permissions
 export 'permissions/permission_manifest.dart';

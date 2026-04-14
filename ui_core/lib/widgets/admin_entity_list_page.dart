@@ -56,7 +56,6 @@ class AdminEntityListPage<T> extends StatefulWidget {
     required this.columns,
     required this.items,
     required this.rowBuilder,
-    this.searchHint = 'Search...',
     this.detailBuilder,
     this.actions,
     this.onSearch,
@@ -80,7 +79,6 @@ class AdminEntityListPage<T> extends StatefulWidget {
   final List<T> items;
   final DataRow Function(T item, bool selected, VoidCallback onSelect)
       rowBuilder;
-  final String searchHint;
   final Widget Function(T item)? detailBuilder;
   final List<Widget>? actions;
   final ValueChanged<String>? onSearch;
@@ -131,15 +129,8 @@ class _AdminEntityListPageState<T> extends State<AdminEntityListPage<T>> {
   int _currentPage = 0;
   late int _pageSize = widget.rowsPerPage;
   int _lastItemCount = 0;
-  final _searchController = TextEditingController();
 
   static const _pageSizeOptions = [10, 25, 50, 100];
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
 
   void _exportCsv() {
     if (widget.exportRow == null) return;
@@ -239,55 +230,57 @@ class _AdminEntityListPageState<T> extends State<AdminEntityListPage<T>> {
               flex: showDetailPanel ? 3 : 1,
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    PageHeader(
-                      title: widget.title,
-                      breadcrumbs: widget.breadcrumbs,
-                      actions: [
-                        if (widget.onAdd != null || widget.editFields != null)
-                          ElevatedButton.icon(
-                            onPressed: widget.editFields != null
-                                ? _openCreate
-                                : widget.onAdd,
-                            icon: const Icon(Icons.add, size: 18),
-                            label: Text(widget.addLabel ?? 'Add'),
-                          ),
-                        ...?widget.actions,
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    // Search + filters + export
-                    Row(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1200),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _searchController,
-                            onChanged: widget.onSearch,
-                            decoration: InputDecoration(
-                              hintText: widget.searchHint,
-                              prefixIcon:
-                                  const Icon(Icons.search, size: 20),
-                              isDense: true,
+                        PageHeader(
+                          title: widget.title,
+                          breadcrumbs: widget.breadcrumbs,
+                          actions: [
+                            if (widget.exportRow != null)
+                              OutlinedButton.icon(
+                                onPressed: _exportCsv,
+                                icon: const Icon(Icons.download, size: 18),
+                                label: const Text('Export'),
+                              ),
+                            if (widget.onAdd != null ||
+                                widget.editFields != null)
+                              ElevatedButton.icon(
+                                onPressed: widget.editFields != null
+                                    ? _openCreate
+                                    : widget.onAdd,
+                                icon: const Icon(Icons.add, size: 18),
+                                label: Text(widget.addLabel ?? 'Add'),
+                              ),
+                            ...?widget.actions,
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        // Search field — constrained, only when onSearch is set
+                        if (widget.onSearch != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 24),
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 480),
+                              child: TextField(
+                                onChanged: widget.onSearch,
+                                decoration: const InputDecoration(
+                                  hintText: 'Search...',
+                                  prefixIcon: Icon(Icons.search, size: 20),
+                                  isDense: true,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                        if (widget.exportRow != null) ...[
-                          const SizedBox(width: 12),
-                          OutlinedButton.icon(
-                            onPressed: _exportCsv,
-                            icon: const Icon(Icons.download, size: 18),
-                            label: const Text('Export'),
-                          ),
-                        ],
+                        // Paginated data table + footer
+                        ..._buildPaginatedTable(
+                            theme, surfaceColor, borderColor),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    // Paginated data table + footer
-                    ..._buildPaginatedTable(
-                        theme, surfaceColor, borderColor),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -405,6 +398,7 @@ class _AdminEntityListPageState<T> extends State<AdminEntityListPage<T>> {
           ),
         ),
       ),
+      const SizedBox(height: 24),
       // Pagination footer
       Container(
         width: double.infinity,

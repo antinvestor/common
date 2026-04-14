@@ -5,7 +5,7 @@
   "packages": [
     {
       "name": "antinvestor_ui_core",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "dependencies": [
         "antinvestor_api_common",
         "connectivity_plus",
@@ -155,7 +155,7 @@
     },
     {
       "name": "google_fonts",
-      "version": "6.3.3",
+      "version": "8.0.2",
       "dependencies": [
         "crypto",
         "flutter",
@@ -165,7 +165,7 @@
     },
     {
       "name": "go_router",
-      "version": "17.2.0",
+      "version": "17.2.1",
       "dependencies": [
         "collection",
         "flutter",

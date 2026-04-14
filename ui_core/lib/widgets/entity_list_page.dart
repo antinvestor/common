@@ -42,6 +42,9 @@ class EntityListPage<T> extends StatelessWidget {
   final VoidCallback? onLoadMore;
   final String? totalHint;
 
+  /// Maximum content width to prevent stretching on ultra-wide screens.
+  static const double _maxContentWidth = 1080.0;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -51,62 +54,81 @@ class EntityListPage<T> extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-          child: Row(
-            children: [
-              Icon(icon, size: 28, color: theme.colorScheme.primary),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                    if (items.isNotEmpty)
-                      Text(
-                        totalHint ??
-                            '${items.length} items${hasMore ? '+' : ''}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: _maxContentWidth),
+              child: Row(
+                children: [
+                  Icon(icon, size: 28, color: theme.colorScheme.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.3,
+                          ),
                         ),
-                      ),
-                  ],
-                ),
+                        if (items.isNotEmpty)
+                          Text(
+                            totalHint ??
+                                '${items.length} items${hasMore ? '+' : ''}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (actionLabel != null && canAction)
+                    FilledButton.icon(
+                      onPressed: onAction,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: Text(actionLabel!),
+                    ),
+                ],
               ),
-              if (actionLabel != null && canAction)
-                FilledButton.icon(
-                  onPressed: onAction,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: Text(actionLabel!),
-                ),
-            ],
+            ),
           ),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  onChanged: onSearchChanged,
-                  decoration: InputDecoration(
-                    hintText: searchHint ?? 'Search...',
-                    prefixIcon: const Icon(Icons.search, size: 20),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: _maxContentWidth),
+              child: Row(
+                children: [
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 480),
+                    child: TextField(
+                      onChanged: onSearchChanged,
+                      decoration: InputDecoration(
+                        hintText: searchHint ?? 'Search...',
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                      ),
+                    ),
                   ),
-                ),
+                  if (filterWidget != null) ...[
+                    const SizedBox(width: 12),
+                    filterWidget!,
+                  ],
+                ],
               ),
-              if (filterWidget != null) ...[
-                const SizedBox(width: 12),
-                filterWidget!,
-              ],
-            ],
+            ),
           ),
         ),
-        Expanded(child: _buildContent(context, theme)),
+        Expanded(
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: _maxContentWidth + 48),
+              child: _buildContent(context, theme),
+            ),
+          ),
+        ),
       ],
     );
   }
