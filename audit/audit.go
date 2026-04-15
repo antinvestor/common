@@ -211,19 +211,38 @@ type Config interface {
 	// AuditCaptureResponseBody returns true if response payloads should be
 	// serialized into the audit entry.
 	AuditCaptureResponseBody() bool
+
+	// AuditShouldSkipRPC returns true if the given Connect RPC should NOT
+	// be audited. The default skips idempotent RPCs (Get, Search, List).
+	AuditShouldSkipRPC(spec connect.Spec) bool
+
+	// AuditShouldSkipHTTP returns true if the given HTTP request should NOT
+	// be audited. The default skips GET, HEAD, and OPTIONS.
+	AuditShouldSkipHTTP(method string) bool
 }
 
-// DefaultConfig returns a Config with body capture disabled.
+// DefaultConfig audits only mutating operations, no body capture.
 type DefaultConfig struct{}
 
 func (DefaultConfig) AuditCaptureRequestBody() bool  { return false }
 func (DefaultConfig) AuditCaptureResponseBody() bool { return false }
 
-// VerboseConfig returns a Config with body capture enabled.
+func (DefaultConfig) AuditShouldSkipRPC(spec connect.Spec) bool {
+	return spec.IdempotencyLevel == connect.IdempotencyIdempotent ||
+		spec.IdempotencyLevel == connect.IdempotencyNoSideEffects
+}
+
+func (DefaultConfig) AuditShouldSkipHTTP(method string) bool {
+	return method == "GET" || method == "HEAD" || method == "OPTIONS"
+}
+
+// VerboseConfig audits everything with body capture enabled.
 type VerboseConfig struct{}
 
-func (VerboseConfig) AuditCaptureRequestBody() bool  { return true }
-func (VerboseConfig) AuditCaptureResponseBody() bool { return true }
+func (VerboseConfig) AuditCaptureRequestBody() bool          { return true }
+func (VerboseConfig) AuditCaptureResponseBody() bool         { return true }
+func (VerboseConfig) AuditShouldSkipRPC(_ connect.Spec) bool { return false }
+func (VerboseConfig) AuditShouldSkipHTTP(_ string) bool      { return false }
 
 // Interceptor is a Connect RPC interceptor that captures audit entries
 // for non-idempotent RPCs and sends them to the audit service.
@@ -256,36 +275,30 @@ func NewInterceptorWithConfig(serviceName string, auditClient auditv1connect.Aud
 
 func (a *Interceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		if shouldSkip(ctx) {
+		if shouldSkipInternal(ctx) || a.config.AuditShouldSkipRPC(req.Spec()) {
 			return next(ctx, req)
 		}
 
-		readOnly := isReadOnly(req.Spec())
 		start := time.Now()
 		procedure := req.Spec().Procedure
 
 		// Pre-populate an empty entry so handlers can enrich it via
 		// the With* functions. The entry is a pointer — mutations in
 		// the handler are visible to the interceptor after return.
-		if !readOnly {
-			ctx = initEntry(ctx)
-			// Capture IP and user agent from request headers.
-			if e := entryFromContext(ctx); e != nil {
-				e.IPAddress = extractIPAddress(req.Header())
-				e.UserAgent = req.Header().Get("User-Agent")
-			}
+		ctx = initEntry(ctx)
+		if e := entryFromContext(ctx); e != nil {
+			e.IPAddress = extractIPAddress(req.Header())
+			e.UserAgent = req.Header().Get("User-Agent")
 		}
 
 		var reqSnapshot string
-		if !readOnly && a.config.AuditCaptureRequestBody() {
+		if a.config.AuditCaptureRequestBody() {
 			reqSnapshot = marshalProto(req.Any())
 		}
 
 		resp, err := next(ctx, req)
 
-		if !readOnly || err != nil {
-			a.record(ctx, procedure, start, reqSnapshot, resp, err)
-		}
+		a.record(ctx, procedure, start, reqSnapshot, resp, err)
 
 		return resp, err
 	}
@@ -297,31 +310,25 @@ func (a *Interceptor) WrapStreamingClient(next connect.StreamingClientFunc) conn
 
 func (a *Interceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		if shouldSkip(ctx) {
+		if shouldSkipInternal(ctx) || a.config.AuditShouldSkipRPC(conn.Spec()) {
 			return next(ctx, conn)
 		}
 
-		readOnly := isReadOnly(conn.Spec())
 		start := time.Now()
+		ctx = initEntry(ctx)
 		err := next(ctx, conn)
 
-		if !readOnly || err != nil {
-			a.record(ctx, conn.Spec().Procedure, start, "", nil, err)
-		}
+		a.record(ctx, conn.Spec().Procedure, start, "", nil, err)
 
 		return err
 	}
 }
 
-func shouldSkip(ctx context.Context) bool {
+func shouldSkipInternal(ctx context.Context) bool {
 	claims := security.ClaimsFromContext(ctx)
 	return claims != nil && claims.IsInternalSystem()
 }
 
-func isReadOnly(spec connect.Spec) bool {
-	return spec.IdempotencyLevel == connect.IdempotencyIdempotent ||
-		spec.IdempotencyLevel == connect.IdempotencyNoSideEffects
-}
 
 func (a *Interceptor) record(
 	ctx context.Context,

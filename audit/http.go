@@ -51,11 +51,16 @@ import (
 func HTTPMiddleware(
 	serviceName string,
 	auditClient auditv1connect.AuditServiceClient,
+	cfgs ...Config,
 ) func(http.Handler) http.Handler {
+	var cfg Config = DefaultConfig{}
+	if len(cfgs) > 0 && cfgs[0] != nil {
+		cfg = cfgs[0]
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Skip internal calls and read-only GET/HEAD/OPTIONS.
-			if shouldSkipHTTP(r) {
+			// Skip internal calls and non-mutating methods per config.
+			if shouldSkipInternal(r.Context()) || cfg.AuditShouldSkipHTTP(r.Method) {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -70,9 +75,9 @@ func HTTPMiddleware(
 			}
 			r = r.WithContext(ctx)
 
-			// Capture request body for mutating requests.
+			// Capture request body if configured.
 			var reqBody string
-			if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			if cfg.AuditCaptureRequestBody() {
 				reqBody = captureRequestBody(r)
 			}
 
@@ -96,17 +101,6 @@ func HTTPMiddleware(
 	}
 }
 
-// shouldSkipHTTP returns true for requests that shouldn't be audited.
-func shouldSkipHTTP(r *http.Request) bool {
-	// Skip safe methods.
-	switch r.Method {
-	case http.MethodGet, http.MethodHead, http.MethodOptions:
-		return true
-	}
-	// Skip internal system calls.
-	claims := security.ClaimsFromContext(r.Context())
-	return claims != nil && claims.IsInternalSystem()
-}
 
 // statusWriter wraps http.ResponseWriter to capture the status code.
 type statusWriter struct {
