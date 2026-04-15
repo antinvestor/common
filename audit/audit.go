@@ -203,27 +203,27 @@ func WithDetail(ctx context.Context, key string, value any) context.Context {
 // to provide custom configuration (e.g. from environment variables,
 // feature flags, or per-request logic).
 type Config interface {
-	// ShouldCaptureRequestBody returns true if request payloads should be
+	// AuditCaptureRequestBody returns true if request payloads should be
 	// serialized into the audit entry. Disabled by default to avoid
 	// performance overhead and accidental PII exposure.
-	ShouldCaptureRequestBody() bool
+	AuditCaptureRequestBody() bool
 
-	// ShouldCaptureResponseBody returns true if response payloads should be
+	// AuditCaptureResponseBody returns true if response payloads should be
 	// serialized into the audit entry.
-	ShouldCaptureResponseBody() bool
+	AuditCaptureResponseBody() bool
 }
 
 // DefaultConfig returns a Config with body capture disabled.
 type DefaultConfig struct{}
 
-func (DefaultConfig) ShouldCaptureRequestBody() bool  { return false }
-func (DefaultConfig) ShouldCaptureResponseBody() bool { return false }
+func (DefaultConfig) AuditCaptureRequestBody() bool  { return false }
+func (DefaultConfig) AuditCaptureResponseBody() bool { return false }
 
 // VerboseConfig returns a Config with body capture enabled.
 type VerboseConfig struct{}
 
-func (VerboseConfig) ShouldCaptureRequestBody() bool  { return true }
-func (VerboseConfig) ShouldCaptureResponseBody() bool { return true }
+func (VerboseConfig) AuditCaptureRequestBody() bool  { return true }
+func (VerboseConfig) AuditCaptureResponseBody() bool { return true }
 
 // Interceptor is a Connect RPC interceptor that captures audit entries
 // for non-idempotent RPCs and sends them to the audit service.
@@ -277,7 +277,7 @@ func (a *Interceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		}
 
 		var reqSnapshot string
-		if !readOnly && a.config.ShouldCaptureRequestBody() {
+		if !readOnly && a.config.AuditCaptureRequestBody() {
 			reqSnapshot = marshalProto(req.Any())
 		}
 
@@ -398,7 +398,7 @@ func (a *Interceptor) record(
 		fields["request"] = requestBody
 	}
 	var respBody string
-	if a.config.ShouldCaptureResponseBody() {
+	if a.config.AuditCaptureResponseBody() {
 		respBody = marshalResponse(resp)
 		if respBody != "" {
 			fields["response"] = respBody
