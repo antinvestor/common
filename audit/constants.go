@@ -44,10 +44,33 @@ const (
 	ResourceMembership  = "membership"
 	ResourceInvestor    = "investor"
 
-	// Financial
-	ResourceLoanProduct = "loan_product"
-	ResourceLoanAccount = "loan_account"
-	ResourceLoanRequest = "loan_request"
+	// Financial — Loans
+	ResourceLoanProduct     = "loan_product"
+	ResourceLoanAccount     = "loan_account"
+	ResourceLoanRequest     = "loan_request"
+	ResourceRepayment       = "repayment"
+	ResourcePenalty         = "penalty"
+	ResourceDisbursement    = "disbursement"
+	ResourceLoanRestructure = "loan_restructure"
+	ResourceReconciliation  = "reconciliation"
+
+	// Financial — Savings
+	ResourceSavingsProduct = "savings_product"
+	ResourceSavingsAccount = "savings_account"
+	ResourceDeposit        = "deposit"
+	ResourceWithdrawal     = "withdrawal"
+
+	// Financial — Funding
+	ResourceInvestorAccount  = "investor_account"
+	ResourceFundingAllocation = "funding_allocation"
+
+	// Financial — Operations
+	ResourceTransferOrder = "transfer_order"
+	ResourcePayment       = "payment"
+
+	// Field
+	ResourceAgent              = "agent"
+	ResourceClientRelationship = "client_relationship"
 
 	// Settings and config
 	ResourceFormTemplate   = "form_template"
