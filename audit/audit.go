@@ -107,16 +107,27 @@ func entryFromContext(ctx context.Context) *Entry {
 
 func ensureEntry(ctx context.Context) (context.Context, *Entry) {
 	e := entryFromContext(ctx)
-	if e == nil {
-		e = &Entry{Details: map[string]any{}}
-		ctx = context.WithValue(ctx, contextKey{}, e)
+	if e != nil {
+		return ctx, e
 	}
-	return ctx, e
+	e = &Entry{Details: map[string]any{}}
+	return context.WithValue(ctx, contextKey{}, e), e
+}
+
+// initEntry pre-populates the context with an empty entry so handlers
+// can mutate it in place without creating new context values.
+func initEntry(ctx context.Context) context.Context {
+	if entryFromContext(ctx) != nil {
+		return ctx
+	}
+	return context.WithValue(ctx, contextKey{}, &Entry{Details: map[string]any{}})
 }
 
 // WithResource identifies the primary resource being acted on.
+// If an entry was pre-populated by the interceptor, the existing pointer
+// is mutated (no new context allocation). Otherwise a new entry is created.
 //
-//	ctx = audit.WithResource(ctx, "organization", org.GetId())
+//	audit.WithResource(ctx, "organization", org.GetId())
 func WithResource(ctx context.Context, resourceType, resourceID string) context.Context {
 	ctx, e := ensureEntry(ctx)
 	e.ResourceType = resourceType
@@ -126,7 +137,7 @@ func WithResource(ctx context.Context, resourceType, resourceID string) context.
 
 // WithAction overrides the auto-detected action name.
 //
-//	ctx = audit.WithAction(ctx, "approve")
+//	audit.WithAction(ctx, "approve")
 func WithAction(ctx context.Context, action string) context.Context {
 	ctx, e := ensureEntry(ctx)
 	e.Action = action
@@ -135,7 +146,7 @@ func WithAction(ctx context.Context, action string) context.Context {
 
 // WithTarget sets the target profile affected by this action.
 //
-//	ctx = audit.WithTarget(ctx, memberProfileID)
+//	audit.WithTarget(ctx, memberProfileID)
 func WithTarget(ctx context.Context, targetProfileID string) context.Context {
 	ctx, e := ensureEntry(ctx)
 	e.TargetProfileID = targetProfileID
@@ -144,7 +155,7 @@ func WithTarget(ctx context.Context, targetProfileID string) context.Context {
 
 // WithStateChange records a state transition on the resource.
 //
-//	ctx = audit.WithStateChange(ctx, "CREATED", "ACTIVE")
+//	audit.WithStateChange(ctx, "CREATED", "ACTIVE")
 func WithStateChange(ctx context.Context, fromState, toState string) context.Context {
 	ctx, e := ensureEntry(ctx)
 	e.StateFrom = fromState
@@ -155,12 +166,10 @@ func WithStateChange(ctx context.Context, fromState, toState string) context.Con
 // WithRelation records a relationship created, modified, or removed.
 // Call multiple times for multiple relationships in a single action.
 //
-//	ctx = audit.WithRelation(ctx, audit.Relation{
-//	    ParentType: "profile",
-//	    ParentID:   profileID,
-//	    ChildType:  "contact",
-//	    ChildID:    contactID,
-//	    Action:     "added",
+//	audit.WithRelation(ctx, audit.Relation{
+//	    ParentType: "profile", ParentID: profileID,
+//	    ChildType: "contact", ChildID: contactID,
+//	    Action: "added",
 //	})
 func WithRelation(ctx context.Context, rel Relation) context.Context {
 	ctx, e := ensureEntry(ctx)
@@ -170,9 +179,8 @@ func WithRelation(ctx context.Context, rel Relation) context.Context {
 
 // WithDetail adds a single key-value detail. Safe to call multiple times.
 //
-//	ctx = audit.WithDetail(ctx, "reason", "compliance review")
-//	ctx = audit.WithDetail(ctx, "old_name", oldName)
-//	ctx = audit.WithDetail(ctx, "new_name", newName)
+//	audit.WithDetail(ctx, "reason", "compliance review")
+//	audit.WithDetail(ctx, "old_name", oldName)
 func WithDetail(ctx context.Context, key string, value any) context.Context {
 	ctx, e := ensureEntry(ctx)
 	if e.Details == nil {
@@ -213,6 +221,13 @@ func (a *Interceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		readOnly := isReadOnly(req.Spec())
 		start := time.Now()
 		procedure := req.Spec().Procedure
+
+		// Pre-populate an empty entry so handlers can enrich it via
+		// the With* functions. The entry is a pointer — mutations in
+		// the handler are visible to the interceptor after return.
+		if !readOnly {
+			ctx = initEntry(ctx)
+		}
 
 		var reqSnapshot string
 		if !readOnly {
