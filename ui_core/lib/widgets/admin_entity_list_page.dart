@@ -59,6 +59,7 @@ class AdminEntityListPage<T> extends StatefulWidget {
     this.detailBuilder,
     this.actions,
     this.onSearch,
+    this.searchHint,
     this.onAdd,
     this.addLabel,
     this.onRowNavigate,
@@ -82,6 +83,7 @@ class AdminEntityListPage<T> extends StatefulWidget {
   final Widget Function(T item)? detailBuilder;
   final List<Widget>? actions;
   final ValueChanged<String>? onSearch;
+  final String? searchHint;
   final VoidCallback? onAdd;
   final String? addLabel;
 
@@ -267,9 +269,9 @@ class _AdminEntityListPageState<T> extends State<AdminEntityListPage<T>> {
                               constraints: const BoxConstraints(maxWidth: 480),
                               child: TextField(
                                 onChanged: widget.onSearch,
-                                decoration: const InputDecoration(
-                                  hintText: 'Search...',
-                                  prefixIcon: Icon(Icons.search, size: 20),
+                                decoration: InputDecoration(
+                                  hintText: widget.searchHint ?? 'Search...',
+                                  prefixIcon: const Icon(Icons.search, size: 20),
                                   isDense: true,
                                 ),
                               ),
