@@ -199,11 +199,23 @@ func WithDetail(ctx context.Context, key string, value any) context.Context {
 // Interceptor
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Config controls audit interceptor behavior.
+type Config struct {
+	// CaptureRequestBody enables serialization of request payloads into the audit entry.
+	// Disabled by default to avoid performance overhead and accidental PII exposure.
+	CaptureRequestBody bool
+
+	// CaptureResponseBody enables serialization of response payloads into the audit entry.
+	// Disabled by default for the same reasons.
+	CaptureResponseBody bool
+}
+
 // Interceptor is a Connect RPC interceptor that captures audit entries
 // for non-idempotent RPCs and sends them to the audit service.
 type Interceptor struct {
 	serviceName string
 	auditClient auditv1connect.AuditServiceClient
+	config      Config
 }
 
 // NewInterceptor creates an audit interceptor.
@@ -214,6 +226,15 @@ func NewInterceptor(serviceName string, auditClient auditv1connect.AuditServiceC
 	return &Interceptor{
 		serviceName: serviceName,
 		auditClient: auditClient,
+	}
+}
+
+// NewInterceptorWithConfig creates an audit interceptor with explicit configuration.
+func NewInterceptorWithConfig(serviceName string, auditClient auditv1connect.AuditServiceClient, cfg Config) connect.Interceptor {
+	return &Interceptor{
+		serviceName: serviceName,
+		auditClient: auditClient,
+		config:      cfg,
 	}
 }
 
@@ -240,16 +261,13 @@ func (a *Interceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		}
 
 		var reqSnapshot string
-		if !readOnly {
+		if !readOnly && a.config.CaptureRequestBody {
 			reqSnapshot = marshalProto(req.Any())
 		}
 
 		resp, err := next(ctx, req)
 
 		if !readOnly || err != nil {
-			if readOnly && reqSnapshot == "" {
-				reqSnapshot = marshalProto(req.Any())
-			}
 			a.record(ctx, procedure, start, reqSnapshot, resp, err)
 		}
 
@@ -300,21 +318,22 @@ func (a *Interceptor) record(
 	claims := security.ClaimsFromContext(ctx)
 	entry := entryFromContext(ctx)
 
-	// Determine resource type and action from procedure or enrichment.
-	resourceType, action := ParseProcedure(procedure)
-	var resourceID, targetProfileID, stateFrom, stateTo string
-
+	// Resource type and action come from handler enrichment.
+	// If not enriched, the raw procedure name is used.
+	var resourceType, action, resourceID, targetProfileID, stateFrom, stateTo string
 	if entry != nil {
-		if entry.ResourceType != "" {
-			resourceType = entry.ResourceType
-		}
-		if entry.Action != "" {
-			action = entry.Action
-		}
+		resourceType = entry.ResourceType
+		action = entry.Action
 		resourceID = entry.ResourceID
 		targetProfileID = entry.TargetProfileID
 		stateFrom = entry.StateFrom
 		stateTo = entry.StateTo
+	}
+	if resourceType == "" {
+		resourceType = procedure
+	}
+	if action == "" {
+		action = "execute"
 	}
 
 	// Build structured log fields.
@@ -362,9 +381,12 @@ func (a *Interceptor) record(
 	if requestBody != "" {
 		fields["request"] = requestBody
 	}
-	respBody := marshalResponse(resp)
-	if respBody != "" {
-		fields["response"] = respBody
+	var respBody string
+	if a.config.CaptureResponseBody {
+		respBody = marshalResponse(resp)
+		if respBody != "" {
+			fields["response"] = respBody
+		}
 	}
 	if callErr != nil {
 		fields["error"] = callErr.Error()
@@ -499,32 +521,6 @@ func extractIPAddress(h http.Header) string {
 	return ""
 }
 
-// ParseProcedure extracts resource type and action from a Connect procedure.
-// e.g. "/profile.v1.ProfileService/AddContact" → ("Contact", "Add")
-func ParseProcedure(procedure string) (string, string) {
-	parts := strings.Split(procedure, "/")
-	method := parts[len(parts)-1]
-	for _, suffix := range []string{
-		"Save", "Create", "Delete", "Update", "Remove",
-		"Submit", "Approve", "Reject", "Cancel",
-		"Record", "Apply", "Complete", "Manage",
-		"Verify", "Publish", "Deposit", "Withdraw",
-		"Transfer", "Reassign", "Merge",
-	} {
-		if strings.HasSuffix(method, suffix) {
-			return method[:len(method)-len(suffix)], suffix
-		}
-	}
-	// Try prefix-based actions (Add*, Get*, List*, Search*).
-	for _, prefix := range []string{
-		"Add", "Set", "Check", "Batch",
-	} {
-		if strings.HasPrefix(method, prefix) {
-			return method[len(prefix):], prefix
-		}
-	}
-	return method, "Execute"
-}
 
 func marshalProto(msg any) string {
 	pm, ok := msg.(proto.Message)
