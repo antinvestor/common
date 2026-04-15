@@ -15,22 +15,33 @@
 // Package audit provides a reusable Connect RPC interceptor for audit logging.
 //
 // The interceptor captures all non-idempotent RPC calls and sends structured
-// audit entries to the audit service. Handlers can enrich the audit context
-// with resource-specific metadata.
+// audit entries to the audit service. Handlers enrich the audit context with
+// resource-specific metadata using the With* functions.
 //
-// Usage:
+// # Basic usage
 //
-//	// In service setup:
-//	auditClient := auditv1connect.NewAuditServiceClient(httpClient, auditURL)
-//	interceptor := audit.NewInterceptor("service_identity", auditClient)
+//	interceptor := audit.NewInterceptor("service_profile", auditClient)
 //
-//	// In a handler:
-//	ctx = audit.WithFields(ctx, audit.Fields{
-//	    ResourceType: "organization",
-//	    ResourceID:   org.GetId(),
+// # Handler enrichment
+//
+//	// Identify the resource being acted on.
+//	ctx = audit.WithResource(ctx, "organization", org.GetId())
+//
+//	// Record a state transition.
+//	ctx = audit.WithStateChange(ctx, "CREATED", "ACTIVE")
+//
+//	// Record a relationship change (e.g. contact added to profile).
+//	ctx = audit.WithRelation(ctx, audit.Relation{
+//	    ParentType: "profile",
+//	    ParentID:   profileID,
+//	    ChildType:  "contact",
+//	    ChildID:    contactID,
+//	    Action:     "added",
 //	})
-//	ctx = audit.WithDetail(ctx, "old_state", "CREATED")
-//	ctx = audit.WithDetail(ctx, "new_state", "ACTIVE")
+//
+//	// Add arbitrary key-value details.
+//	ctx = audit.WithDetail(ctx, "reason", "customer request")
+//	ctx = audit.WithDetail(ctx, "approved_by", approverID)
 package audit
 
 import (
@@ -51,60 +62,132 @@ import (
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Context-based enrichment
+// Context enrichment — handlers use these to add audit metadata
 // ─────────────────────────────────────────────────────────────────────────────
 
 type contextKey struct{}
 
-// Fields holds audit enrichment data added by handlers via context.
-type Fields struct {
-	ResourceType    string
-	ResourceID      string
-	Action          string
+// Entry holds all enrichment data accumulated by handlers during an RPC.
+type Entry struct {
+	// Resource being acted on.
+	ResourceType string
+	ResourceID   string
+
+	// Override the auto-detected action (e.g. "approve" instead of "Save").
+	Action string
+
+	// Profile ID of the target user, if the action affects another user.
 	TargetProfileID string
-	Details         map[string]any
+
+	// State transition (e.g. CREATED → ACTIVE).
+	StateFrom string
+	StateTo   string
+
+	// Relationships created or modified during this action.
+	Relations []Relation
+
+	// Arbitrary key-value details.
+	Details map[string]any
 }
 
-// WithFields attaches audit enrichment data to the context.
-//
-//	ctx = audit.WithFields(ctx, audit.Fields{
-//	    ResourceType: "organization",
-//	    ResourceID:   org.GetId(),
-//	    Action:       "create",
-//	})
-func WithFields(ctx context.Context, fields Fields) context.Context {
-	return context.WithValue(ctx, contextKey{}, &fields)
+// Relation represents a link between two entities that was created,
+// modified, or removed during the audited action.
+type Relation struct {
+	ParentType string // e.g. "profile"
+	ParentID   string // e.g. "d75qclkpf2t1uum8ij3g"
+	ChildType  string // e.g. "contact"
+	ChildID    string // e.g. "d7eloa0jbutr739k3qmg"
+	Action     string // e.g. "added", "removed", "updated"
 }
 
-// WithDetail adds a single key-value detail to the audit context.
-// Safe to call multiple times — details accumulate.
+func entryFromContext(ctx context.Context) *Entry {
+	val, _ := ctx.Value(contextKey{}).(*Entry)
+	return val
+}
+
+func ensureEntry(ctx context.Context) (context.Context, *Entry) {
+	e := entryFromContext(ctx)
+	if e == nil {
+		e = &Entry{Details: map[string]any{}}
+		ctx = context.WithValue(ctx, contextKey{}, e)
+	}
+	return ctx, e
+}
+
+// WithResource identifies the primary resource being acted on.
 //
-//	ctx = audit.WithDetail(ctx, "old_state", "CREATED")
-//	ctx = audit.WithDetail(ctx, "new_state", "ACTIVE")
-func WithDetail(ctx context.Context, key string, value any) context.Context {
-	fields := fieldsFromContext(ctx)
-	if fields == nil {
-		fields = &Fields{Details: map[string]any{}}
-		ctx = context.WithValue(ctx, contextKey{}, fields)
-	}
-	if fields.Details == nil {
-		fields.Details = map[string]any{}
-	}
-	fields.Details[key] = value
+//	ctx = audit.WithResource(ctx, "organization", org.GetId())
+func WithResource(ctx context.Context, resourceType, resourceID string) context.Context {
+	ctx, e := ensureEntry(ctx)
+	e.ResourceType = resourceType
+	e.ResourceID = resourceID
 	return ctx
 }
 
-func fieldsFromContext(ctx context.Context) *Fields {
-	val, _ := ctx.Value(contextKey{}).(*Fields)
-	return val
+// WithAction overrides the auto-detected action name.
+//
+//	ctx = audit.WithAction(ctx, "approve")
+func WithAction(ctx context.Context, action string) context.Context {
+	ctx, e := ensureEntry(ctx)
+	e.Action = action
+	return ctx
+}
+
+// WithTarget sets the target profile affected by this action.
+//
+//	ctx = audit.WithTarget(ctx, memberProfileID)
+func WithTarget(ctx context.Context, targetProfileID string) context.Context {
+	ctx, e := ensureEntry(ctx)
+	e.TargetProfileID = targetProfileID
+	return ctx
+}
+
+// WithStateChange records a state transition on the resource.
+//
+//	ctx = audit.WithStateChange(ctx, "CREATED", "ACTIVE")
+func WithStateChange(ctx context.Context, fromState, toState string) context.Context {
+	ctx, e := ensureEntry(ctx)
+	e.StateFrom = fromState
+	e.StateTo = toState
+	return ctx
+}
+
+// WithRelation records a relationship created, modified, or removed.
+// Call multiple times for multiple relationships in a single action.
+//
+//	ctx = audit.WithRelation(ctx, audit.Relation{
+//	    ParentType: "profile",
+//	    ParentID:   profileID,
+//	    ChildType:  "contact",
+//	    ChildID:    contactID,
+//	    Action:     "added",
+//	})
+func WithRelation(ctx context.Context, rel Relation) context.Context {
+	ctx, e := ensureEntry(ctx)
+	e.Relations = append(e.Relations, rel)
+	return ctx
+}
+
+// WithDetail adds a single key-value detail. Safe to call multiple times.
+//
+//	ctx = audit.WithDetail(ctx, "reason", "compliance review")
+//	ctx = audit.WithDetail(ctx, "old_name", oldName)
+//	ctx = audit.WithDetail(ctx, "new_name", newName)
+func WithDetail(ctx context.Context, key string, value any) context.Context {
+	ctx, e := ensureEntry(ctx)
+	if e.Details == nil {
+		e.Details = map[string]any{}
+	}
+	e.Details[key] = value
+	return ctx
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Interceptor
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Interceptor is a Connect RPC interceptor that logs audit entries for
-// non-idempotent RPCs and sends them to the audit service.
+// Interceptor is a Connect RPC interceptor that captures audit entries
+// for non-idempotent RPCs and sends them to the audit service.
 type Interceptor struct {
 	serviceName string
 	auditClient auditv1connect.AuditServiceClient
@@ -112,7 +195,7 @@ type Interceptor struct {
 
 // NewInterceptor creates an audit interceptor.
 //
-//   - serviceName: identifies the originating service (e.g. "service_identity")
+//   - serviceName: identifies the originating service (e.g. "service_profile")
 //   - auditClient: the audit service client. If nil, entries are only logged.
 func NewInterceptor(serviceName string, auditClient auditv1connect.AuditServiceClient) connect.Interceptor {
 	return &Interceptor{
@@ -190,22 +273,26 @@ func (a *Interceptor) record(
 	callErr error,
 ) {
 	claims := security.ClaimsFromContext(ctx)
-	enrichment := fieldsFromContext(ctx)
+	entry := entryFromContext(ctx)
 
+	// Determine resource type and action from procedure or enrichment.
 	resourceType, action := ParseProcedure(procedure)
-	var resourceID, targetProfileID string
+	var resourceID, targetProfileID, stateFrom, stateTo string
 
-	if enrichment != nil {
-		if enrichment.ResourceType != "" {
-			resourceType = enrichment.ResourceType
+	if entry != nil {
+		if entry.ResourceType != "" {
+			resourceType = entry.ResourceType
 		}
-		if enrichment.Action != "" {
-			action = enrichment.Action
+		if entry.Action != "" {
+			action = entry.Action
 		}
-		resourceID = enrichment.ResourceID
-		targetProfileID = enrichment.TargetProfileID
+		resourceID = entry.ResourceID
+		targetProfileID = entry.TargetProfileID
+		stateFrom = entry.StateFrom
+		stateTo = entry.StateTo
 	}
 
+	// Build structured log fields.
 	fields := map[string]any{
 		"audit":         true,
 		"service":       a.serviceName,
@@ -232,6 +319,10 @@ func (a *Interceptor) record(
 	if resourceID != "" {
 		fields["resource_id"] = resourceID
 	}
+	if stateFrom != "" || stateTo != "" {
+		fields["state_from"] = stateFrom
+		fields["state_to"] = stateTo
+	}
 	if requestBody != "" {
 		fields["request"] = requestBody
 	}
@@ -244,6 +335,9 @@ func (a *Interceptor) record(
 	}
 
 	desc := fmt.Sprintf("%s %s", action, resourceType)
+	if stateFrom != "" && stateTo != "" {
+		desc += fmt.Sprintf(" (%s → %s)", stateFrom, stateTo)
+	}
 	if callErr != nil {
 		desc += " (failed)"
 	}
@@ -256,10 +350,10 @@ func (a *Interceptor) record(
 		logger.Info(desc)
 	}
 
-	// Send to audit service asynchronously.
+	// Send to audit service asynchronously (best-effort).
 	if a.auditClient != nil && profileID != "" {
 		go a.send(ctx, profileID, action, resourceType, resourceID,
-			deviceID, targetProfileID, enrichment, requestBody, respBody, callErr)
+			deviceID, targetProfileID, entry, requestBody, respBody, callErr)
 	}
 }
 
@@ -267,7 +361,7 @@ func (a *Interceptor) send(
 	ctx context.Context,
 	profileID, action, resourceType, resourceID,
 	deviceID, targetProfileID string,
-	enrichment *Fields,
+	entry *Entry,
 	requestBody, responseBody string,
 	callErr error,
 ) {
@@ -278,7 +372,10 @@ func (a *Interceptor) send(
 		sendCtx = claims.ClaimsToContext(sendCtx)
 	}
 
-	detailsMap := map[string]any{"service": a.serviceName}
+	// Build details — everything goes into one Struct for the audit service.
+	detailsMap := map[string]any{
+		"service": a.serviceName,
+	}
 	if requestBody != "" {
 		detailsMap["request"] = requestBody
 	}
@@ -288,8 +385,33 @@ func (a *Interceptor) send(
 	if callErr != nil {
 		detailsMap["error"] = callErr.Error()
 	}
-	if enrichment != nil {
-		for k, v := range enrichment.Details {
+
+	// State change.
+	if entry != nil {
+		if entry.StateFrom != "" {
+			detailsMap["state_from"] = entry.StateFrom
+		}
+		if entry.StateTo != "" {
+			detailsMap["state_to"] = entry.StateTo
+		}
+
+		// Relations — stored as a list of maps for queryability.
+		if len(entry.Relations) > 0 {
+			rels := make([]any, 0, len(entry.Relations))
+			for _, r := range entry.Relations {
+				rels = append(rels, map[string]any{
+					"parent_type": r.ParentType,
+					"parent_id":   r.ParentID,
+					"child_type":  r.ChildType,
+					"child_id":    r.ChildID,
+					"action":      r.Action,
+				})
+			}
+			detailsMap["relations"] = rels
+		}
+
+		// Handler-provided details.
+		for k, v := range entry.Details {
 			detailsMap[k] = v
 		}
 	}
@@ -318,12 +440,12 @@ func (a *Interceptor) send(
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ParseProcedure extracts resource type and action from a Connect procedure.
-// e.g. "/identity.v1.IdentityService/OrganizationSave" → ("Organization", "Save")
+// e.g. "/profile.v1.ProfileService/AddContact" → ("Contact", "Add")
 func ParseProcedure(procedure string) (string, string) {
 	parts := strings.Split(procedure, "/")
 	method := parts[len(parts)-1]
 	for _, suffix := range []string{
-		"Save", "Create", "Delete", "Update",
+		"Save", "Create", "Delete", "Update", "Remove",
 		"Submit", "Approve", "Reject", "Cancel",
 		"Record", "Apply", "Complete", "Manage",
 		"Verify", "Publish", "Deposit", "Withdraw",
@@ -331,6 +453,14 @@ func ParseProcedure(procedure string) (string, string) {
 	} {
 		if strings.HasSuffix(method, suffix) {
 			return method[:len(method)-len(suffix)], suffix
+		}
+	}
+	// Try prefix-based actions (Add*, Get*, List*, Search*).
+	for _, prefix := range []string{
+		"Add", "Set", "Check", "Batch",
+	} {
+		if strings.HasPrefix(method, prefix) {
+			return method[len(prefix):], prefix
 		}
 	}
 	return method, "Execute"
