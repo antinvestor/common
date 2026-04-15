@@ -47,6 +47,7 @@ package audit
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"reflect"
 	"strings"
 	"time"
@@ -88,6 +89,10 @@ type Entry struct {
 
 	// Arbitrary key-value details.
 	Details map[string]any
+
+	// Automatically captured from request headers.
+	IPAddress string
+	UserAgent string
 }
 
 // Relation represents a link between two entities that was created,
@@ -227,6 +232,11 @@ func (a *Interceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		// the handler are visible to the interceptor after return.
 		if !readOnly {
 			ctx = initEntry(ctx)
+			// Capture IP and user agent from request headers.
+			if e := entryFromContext(ctx); e != nil {
+				e.IPAddress = extractIPAddress(req.Header())
+				e.UserAgent = req.Header().Get("User-Agent")
+			}
 		}
 
 		var reqSnapshot string
@@ -334,6 +344,17 @@ func (a *Interceptor) record(
 	if resourceID != "" {
 		fields["resource_id"] = resourceID
 	}
+	var ipAddress, userAgent string
+	if entry != nil {
+		ipAddress = entry.IPAddress
+		userAgent = entry.UserAgent
+		if ipAddress != "" {
+			fields["ip_address"] = ipAddress
+		}
+		if userAgent != "" {
+			fields["user_agent"] = userAgent
+		}
+	}
 	if stateFrom != "" || stateTo != "" {
 		fields["state_from"] = stateFrom
 		fields["state_to"] = stateTo
@@ -436,6 +457,12 @@ func (a *Interceptor) send(
 		return
 	}
 
+	var ipAddr, ua string
+	if entry != nil {
+		ipAddr = entry.IPAddress
+		ua = entry.UserAgent
+	}
+
 	req := &auditv1.CreateAuditEntryRequest{
 		ProfileId:       profileID,
 		Action:          action,
@@ -443,6 +470,8 @@ func (a *Interceptor) send(
 		ResourceId:      resourceID,
 		Service:         a.serviceName,
 		Details:         details,
+		IpAddress:       ipAddr,
+		UserAgent:       ua,
 		DeviceId:        deviceID,
 		TargetProfileId: targetProfileID,
 	}
@@ -453,6 +482,22 @@ func (a *Interceptor) send(
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
+
+// extractIPAddress reads the client IP from standard proxy headers.
+func extractIPAddress(h http.Header) string {
+	// X-Forwarded-For is the standard header set by proxies/load balancers.
+	if xff := h.Get("X-Forwarded-For"); xff != "" {
+		// First IP in the list is the original client.
+		if i := strings.IndexByte(xff, ','); i > 0 {
+			return strings.TrimSpace(xff[:i])
+		}
+		return strings.TrimSpace(xff)
+	}
+	if xri := h.Get("X-Real-Ip"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+	return ""
+}
 
 // ParseProcedure extracts resource type and action from a Connect procedure.
 // e.g. "/profile.v1.ProfileService/AddContact" → ("Contact", "Add")
