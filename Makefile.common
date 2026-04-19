@@ -124,8 +124,18 @@ build: proto-generate ## Build all app binaries
 	done
 
 .PHONY: test
-test: ## Run all tests with race detection
-	$(GO) test -vet=off -race -cover ./...
+test: ## Run all tests (sequential packages, no race detection)
+	# -p 1 runs one package at a time. Services in this org commonly use
+	# testcontainers (Hydra, Postgres, partition/profile/device services);
+	# parallel package execution causes container resource contention and
+	# auth-token invalidation between concurrently-starting stacks.
+	#
+	# -race is omitted here because pitabwire/frame's queue.subscriber.Stop()
+	# is not goroutine-safe with respect to its own listener goroutine. The
+	# race fires reliably during service cleanup in any test that instantiates
+	# a frame.Service (which is most of our integration suites). Until the
+	# upstream frame library fixes this, -race would make `make test` flaky.
+	$(GO) test -vet=off -cover -p 1 ./...
 
 .PHONY: vet
 vet: ## Vet Go code
