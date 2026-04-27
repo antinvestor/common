@@ -45,6 +45,18 @@ jobs:
             IMAGE_NAME="${{ github.repository }}-${APP_NAME}"
           fi
           echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+      - id: platforms
+        run: |
+          # A Dockerfile may opt out of arm64 (e.g. CGO + emulation issues) by
+          # adding a "# build-platforms: linux/amd64" comment near the top.
+          DOCKERFILE="./${{ matrix.app }}/Dockerfile"
+          HINT=$(grep -m1 -E '^# build-platforms:' "$DOCKERFILE" 2>/dev/null | sed -E 's/^# build-platforms:[[:space:]]*//')
+          if [[ -n "$HINT" ]]; then
+            echo "Using per-Dockerfile platforms hint: $HINT"
+            echo "value=$HINT" >> $GITHUB_OUTPUT
+          else
+            echo "value=linux/amd64,linux/arm64" >> $GITHUB_OUTPUT
+          fi
       - id: meta
         uses: docker/metadata-action@v6
         with:
@@ -64,7 +76,7 @@ jobs:
           context: ./
           file: ./${{ matrix.app }}/Dockerfile
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ steps.platforms.outputs.value }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
