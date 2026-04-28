@@ -2,3 +2,4 @@
 # Tool binaries
 tools/inject-permissions/inject-permissions
 tools/generate-opl/generate-opl
+.claude/

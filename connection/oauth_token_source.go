@@ -250,7 +250,7 @@ func (s *privateKeyJWTTokenSource) Token() (*oauth2.Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	return decodeTokenResponse(resp)
 }
@@ -643,7 +643,7 @@ func (s *remoteSignerTokenSource) Token() (*oauth2.Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	return decodeTokenResponse(resp)
 }

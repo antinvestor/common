@@ -53,7 +53,7 @@ type Hypertable struct {
 // Validate returns nil if h is a complete, well-formed configuration.
 func Validate(h Hypertable) error {
 	if h.Table == "" {
-		return errors.New("Table is required")
+		return errors.New("table is required")
 	}
 	if h.TimeColumn == "" {
 		return errors.New("TimeColumn is required")

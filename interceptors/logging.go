@@ -115,9 +115,9 @@ func (l *loggingInterceptor) logResponse(
 	if err != nil {
 		code := connect.CodeOf(err)
 		logger = logger.WithField("error_code", code.String())
-		switch {
-		case code == connect.CodeInternal || code == connect.CodeUnavailable ||
-			code == connect.CodeDataLoss || code == connect.CodeUnknown:
+		switch code {
+		case connect.CodeInternal, connect.CodeUnavailable,
+			connect.CodeDataLoss, connect.CodeUnknown:
 			logger.WithError(err).Error("request failed")
 		default:
 			logger.WithError(err).Warn("request failed")
