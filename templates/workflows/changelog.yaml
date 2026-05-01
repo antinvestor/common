@@ -4,4 +4,7 @@ on:
     types: [opened, synchronize, reopened]
 jobs:
   changelog:
+    permissions:
+      contents: read
+      pull-requests: write
     uses: antinvestor/common/.github/workflows/changelog.yml@main

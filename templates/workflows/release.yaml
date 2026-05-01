@@ -4,8 +4,13 @@ on:
     tags: ["v*.*.*"]
 jobs:
   docker:
+    permissions:
+      contents: read
+      packages: write
     uses: antinvestor/common/.github/workflows/docker-release.yml@main
   buf-push:
+    permissions:
+      contents: read
     uses: antinvestor/common/.github/workflows/buf-push.yaml@main
     secrets:
       buf_token: ${{ secrets.BUF_TOKEN }}
@@ -14,6 +19,8 @@ jobs:
     secrets:
       pub_credentials: ${{ secrets.PUB_DEV_CREDENTIALS }}
   opl-push:
+    permissions:
+      contents: read
     uses: antinvestor/common/.github/workflows/opl-push.yml@main
     secrets:
       deploy_token: ${{ secrets.DEPLOY_REPO_TOKEN }}

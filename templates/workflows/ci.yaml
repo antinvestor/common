@@ -7,8 +7,15 @@ on:
     branches: [main]
 jobs:
   test:
+    permissions:
+      contents: read
+      packages: read
     uses: antinvestor/common/.github/workflows/go-test.yml@main
   lint:
+    permissions:
+      contents: read
     uses: antinvestor/common/.github/workflows/golangci-lint.yml@main
   flutter:
+    permissions:
+      contents: read
     uses: antinvestor/common/.github/workflows/flutter-ci.yml@main

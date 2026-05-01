@@ -6,4 +6,7 @@ on:
     types: [completed]
 jobs:
   auto-merge:
+    permissions:
+      contents: write
+      pull-requests: write
     uses: antinvestor/common/.github/workflows/auto-merge-labeled.yml@main

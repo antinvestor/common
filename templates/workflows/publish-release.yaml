@@ -4,4 +4,6 @@ on:
     - cron: "0 0 */5 * *"
 jobs:
   publish:
+    permissions:
+      contents: write
     uses: antinvestor/common/.github/workflows/publish-release.yml@main

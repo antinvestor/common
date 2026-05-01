@@ -2,4 +2,7 @@ name: Dependabot Auto-Merge
 on: pull_request
 jobs:
   auto-merge:
+    permissions:
+      contents: write
+      pull-requests: write
     uses: antinvestor/common/.github/workflows/dependabot-auto-merge.yml@main

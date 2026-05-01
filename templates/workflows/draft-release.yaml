@@ -4,4 +4,7 @@ on:
     branches: [main]
 jobs:
   draft:
+    permissions:
+      contents: write
+      pull-requests: write
     uses: antinvestor/common/.github/workflows/draft-release.yml@main
