@@ -57,6 +57,9 @@ export 'src/common/client/client_base.dart';
 export 'src/common/v1/common.pb.dart';
 export 'src/common/v1/common.pbenum.dart';
 export 'src/common/v1/common.pbjson.dart';
+export 'src/common/v1/money.pb.dart';
+export 'src/common/v1/money.pbenum.dart';
+export 'src/common/v1/money.pbjson.dart';
 
 // Export well-known types (shared across all service packages)
 export 'src/google/protobuf/struct.pb.dart';

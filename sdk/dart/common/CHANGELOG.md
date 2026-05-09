@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.53.0] - 2026-05-09
+
+### Added
+
+- `common.v1.Money` shared message type. Field numbers and types mirror
+  `google.type.Money` so the wire format is identical — services migrating
+  away from `google.type.Money` can do so without coordinating deploys.
+
 ## [1.52.0] - 2026-1-2
 
 ### Changed

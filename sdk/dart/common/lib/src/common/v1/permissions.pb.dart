@@ -196,7 +196,7 @@ class ServicePermissions extends $pb.GeneratedMessage {
 
   /// Namespace for this service's permissions, used for OPL namespace generation
   /// and ensuring consistency across authorization systems.
-  /// e.g. "service_profile", "service_payment", "service_partition".
+  /// e.g. "service_profile", "service_payment", "service_tenancy".
   @$pb.TagNumber(1)
   $core.String get namespace => $_getSZ(0);
   @$pb.TagNumber(1)
