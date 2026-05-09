@@ -1,12 +1,13 @@
-import 'package:antinvestor_api_common/antinvestor_api_common.dart';
 import 'package:flutter/material.dart';
 
 import 'money_helpers.dart';
 
-/// Displays a [Money] value with proper formatting, optional currency prefix,
-/// and directional coloring (green for credit, red for debit).
+/// Displays a `Money`-shaped value with proper formatting, optional currency
+/// prefix, and directional coloring (green for credit, red for debit).
 ///
-/// Drop this into ANY screen to render a monetary amount consistently.
+/// Accepts any generated proto `Money` (from any service SDK) via dynamic
+/// dispatch. Drop this into ANY screen to render a monetary amount
+/// consistently.
 ///
 /// ```dart
 /// AmountDisplay(amount: transaction.amount)
@@ -40,7 +41,7 @@ class AmountDisplay extends StatelessWidget {
     this.suffix = '',
   }) : compact = true;
 
-  final Money? amount;
+  final dynamic amount;
   final AmountDirection direction;
   final TextStyle? style;
   final bool showCurrency;
@@ -53,8 +54,7 @@ class AmountDisplay extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    if (amount == null ||
-        (amount!.units.toInt() == 0 && amount!.nanos == 0)) {
+    if (_isPlaceholder(amount)) {
       return Text(
         '$prefix$placeholder$suffix',
         style: style ??
@@ -94,5 +94,14 @@ class AmountDisplay extends StatelessWidget {
         fontWeight: FontWeight.w600,
       ),
     );
+  }
+
+  static bool _isPlaceholder(dynamic money) {
+    if (money == null) return true;
+    try {
+      return money.units.toInt() == 0 && money.nanos == 0;
+    } catch (_) {
+      return true;
+    }
   }
 }

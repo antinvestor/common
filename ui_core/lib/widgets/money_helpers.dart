@@ -1,51 +1,90 @@
 import 'package:antinvestor_api_common/antinvestor_api_common.dart';
 import 'package:fixnum/fixnum.dart';
 
-/// Formats a [Money] object for display. Returns "---" if null or zero.
-String formatMoney(Money? money) {
-  if (money == null) return '\u2014';
-  final units = money.units.toInt();
-  final nanos = money.nanos;
-  final currency = money.currencyCode;
+/// Money helpers are intentionally polymorphic: every Antinvestor service
+/// SDK regenerates `google.type.Money` as its own Dart class, so a single
+/// typed signature would only accept one of them. These helpers read the
+/// three structural fields (`units`, `nanos`, `currencyCode`) via dynamic
+/// dispatch, which works against any generated `Money` (or [Money] from
+/// `antinvestor_api_common`).
 
-  if (units == 0 && nanos == 0) return '\u2014';
+const String _emDash = '—';
 
-  // Format with 2 decimal places for display
+({Int64 units, int nanos, String currencyCode})? _readMoney(dynamic money) {
+  if (money == null) return null;
+  try {
+    final units = money.units as Int64;
+    final nanos = money.nanos as int;
+    final currencyCode = money.currencyCode as String;
+    return (units: units, nanos: nanos, currencyCode: currencyCode);
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Formats a `Money`-shaped object for display. Returns `—` if null or zero.
+///
+/// Accepts any object with `units`/`nanos`/`currencyCode` fields — typically
+/// a generated proto `Money` from any service SDK.
+String formatMoney(dynamic money) {
+  final m = _readMoney(money);
+  if (m == null) return _emDash;
+
+  final units = m.units.toInt();
+  final nanos = m.nanos;
+  if (units == 0 && nanos == 0) return _emDash;
+
+  // Display with 2 fractional digits. Locale-aware formatting is intentionally
+  // not done here so the helper stays dependency-free; callers that need
+  // locale formatting should use a domain-specific NumberFormat.
   final cents = nanos ~/ 10000000;
   final formatted = '$units.${cents.toString().padLeft(2, '0')}';
 
-  if (currency.isEmpty) return formatted;
-  return '$currency $formatted';
+  if (m.currencyCode.isEmpty) return formatted;
+  return '${m.currencyCode} $formatted';
 }
 
-/// Creates a [Money] object from a decimal string and currency code.
-/// e.g. "50000.00" with "KES" -> Money(currencyCode: "KES", units: 50000, nanos: 0)
+/// Creates a [Money] (`antinvestor_api_common.Money`) from a decimal string
+/// and currency code.
 ///
-/// Returns a zero-value Money if [amount] is empty or unparseable.
+/// For service-specific request fields, prefer [setMoneyFields] which mutates
+/// an existing typed proto in place rather than constructing a common-typed
+/// instance that would then need to be copied.
 Money moneyFromString(String amount, String currencyCode) {
   final money = Money();
-  money.currencyCode = currencyCode;
+  setMoneyFields(money, amount, currencyCode);
+  return money;
+}
+
+/// Populates the `currencyCode`/`units`/`nanos` fields on an existing
+/// `Money`-shaped proto from a decimal string. Use this to build a request
+/// field without leaving the request's own `Money` Dart type:
+///
+/// ```dart
+/// final req = WithdrawalRequest();
+/// setMoneyFields(req.amount, '50.00', 'KES');
+/// ```
+///
+/// On any parse failure, leaves the target with zero `units`/`nanos`.
+void setMoneyFields(dynamic target, String amount, String currencyCode) {
+  target.currencyCode = currencyCode;
 
   final cleaned = amount.trim();
-  if (cleaned.isEmpty) return money;
+  if (cleaned.isEmpty) return;
 
-  // Strip anything that isn't digit, dot, or leading minus
   final sanitized = cleaned.replaceAll(RegExp(r'[^\d.\-]'), '');
-  if (sanitized.isEmpty) return money;
+  if (sanitized.isEmpty) return;
 
   try {
     final parts = sanitized.split('.');
-    money.units = Int64.parseInt(parts[0].isEmpty ? '0' : parts[0]);
+    target.units = Int64.parseInt(parts[0].isEmpty ? '0' : parts[0]);
     if (parts.length > 1) {
-      // Pad or truncate to 9 digits (nanos)
       final fracStr = parts[1].padRight(9, '0').substring(0, 9);
-      money.nanos = int.parse(fracStr);
+      target.nanos = int.parse(fracStr);
     }
   } catch (_) {
-    // Return zero-value on any parse failure
+    // Leave zero-value on any parse failure.
   }
-
-  return money;
 }
 
 /// Validates that [value] is a valid positive decimal amount string.
@@ -87,18 +126,20 @@ String? validateCurrency(String? value) {
   return null;
 }
 
-/// Extracts the display amount from a Money as a plain string (no currency).
-String moneyToAmountString(Money? money) {
-  if (money == null) return '0';
-  final units = money.units.toInt();
-  final nanos = money.nanos;
-  if (nanos == 0) return '$units';
-  final cents = nanos ~/ 10000000;
+/// Extracts the display amount from a `Money`-shaped object as a plain
+/// string (no currency).
+String moneyToAmountString(dynamic money) {
+  final m = _readMoney(money);
+  if (m == null) return '0';
+  final units = m.units.toInt();
+  if (m.nanos == 0) return '$units';
+  final cents = m.nanos ~/ 10000000;
   return '$units.${cents.toString().padLeft(2, '0')}';
 }
 
-/// Extracts currency code from Money, with fallback.
-String moneyCurrency(Money? money, [String fallback = '']) {
-  if (money == null || money.currencyCode.isEmpty) return fallback;
-  return money.currencyCode;
+/// Extracts currency code from a `Money`-shaped object, with fallback.
+String moneyCurrency(dynamic money, [String fallback = '']) {
+  final m = _readMoney(money);
+  if (m == null || m.currencyCode.isEmpty) return fallback;
+  return m.currencyCode;
 }
