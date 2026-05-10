@@ -32,9 +32,8 @@ class ChartConfig {
   const ChartConfig.distribution(
     this.metric, {
     required this.label,
-    required String groupBy,
+    required this.groupBy,
   })  : type = ChartType.distribution,
-        groupBy = groupBy,
         granularity = null;
 
   final ChartType type;
