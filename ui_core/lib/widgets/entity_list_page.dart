@@ -214,7 +214,7 @@ class EntityListPage<T> extends StatelessWidget {
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
         itemCount: itemCount,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        separatorBuilder: (_, _) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
           if (index < items.length) {
             return itemBuilder(context, items[index]);

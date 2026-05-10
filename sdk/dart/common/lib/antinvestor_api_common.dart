@@ -75,10 +75,14 @@ export 'src/google/protobuf/any.pb.dart';
 export 'src/google/protobuf/any.pbenum.dart';
 export 'src/google/protobuf/any.pbjson.dart';
 
-// Export Google types (shared across all service packages)
+// Export Google types (shared across all service packages).
+//
+// google.type.Money / Money$json are intentionally hidden — services have
+// migrated to common.v1.Money (re-exported above). The remaining
+// google.type.* re-exports stay for codes that still use Interval, etc.
 export 'src/google/type/interval.pb.dart';
 export 'src/google/type/interval.pbenum.dart';
 export 'src/google/type/interval.pbjson.dart';
-export 'src/google/type/money.pb.dart';
+export 'src/google/type/money.pb.dart' hide Money;
 export 'src/google/type/money.pbenum.dart';
-export 'src/google/type/money.pbjson.dart';
+export 'src/google/type/money.pbjson.dart' hide Money$json, moneyDescriptor;

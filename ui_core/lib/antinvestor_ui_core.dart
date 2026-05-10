@@ -1,4 +1,4 @@
-library antinvestor_ui_core;
+library;
 
 // Theme
 export 'theme/app_theme.dart';
