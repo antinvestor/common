@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.53.1] - 2026-05-10
+
+### Fixed
+
+- Hide `Money`, `Money$json`, and `moneyDescriptor` from the
+  `google/type/money` re-exports so the barrel no longer produces
+  `ambiguous_export` errors at consumer sites that already use the
+  canonical `common.v1.Money` re-exports added in 1.53.0.
+
 ## [1.53.0] - 2026-05-09
 
 ### Added
