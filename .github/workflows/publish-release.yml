@@ -1,28 +1,67 @@
 name: Publish Release
+# Find any draft release left by release-drafter and publish it. Before
+# flipping the draft flag we re-point target_commitish at the current
+# default-branch HEAD, so the tag is created at the latest commit
+# rather than the (potentially stale) SHA stored on the draft when it
+# was first opened — a draft can accumulate hours of follow-up merges
+# in its body while target_commitish never moves, and "publishing"
+# would otherwise tag the wrong commit.
 on:
   workflow_call: {}
 
-jobs:
-  check-draft-exists:
-    runs-on: ubuntu-latest
-    outputs:
-      draft_id: ${{ steps.check_draft.outputs.draft_id }}
-    steps:
-      - id: check_draft
-        run: |
-          DRAFT_RELEASE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/${{ github.repository }}/releases)
-          DRAFT_RELEASE_ID=$(echo "$DRAFT_RELEASE" | jq -r '.[] | select(.draft == true) | .id // empty')
-          echo "draft_id=$DRAFT_RELEASE_ID" >> $GITHUB_OUTPUT
+permissions:
+  contents: write
 
-  publish-release:
-    needs: check-draft-exists
+jobs:
+  publish:
     runs-on: ubuntu-latest
-    if: needs.check-draft-exists.outputs.draft_id != ''
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
     steps:
-      - uses: eregon/publish-release@v1
-        with:
-          release_id: ${{ needs.check-draft-exists.outputs.draft_id }}
+      - id: find_draft
+        name: Locate draft release
+        run: |
+          set -euo pipefail
+          # Pick the oldest open draft (release-drafter only ever keeps
+          # one, but if a human added an extra we still publish the
+          # original).
+          draft_json=$(gh api "repos/$REPO/releases" \
+            --jq '[.[] | select(.draft == true)] | sort_by(.id) | .[0] // empty')
+          if [ -z "$draft_json" ] || [ "$draft_json" = "null" ]; then
+            echo "::notice::No draft release found — nothing to publish."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "id=$(echo "$draft_json" | jq -r '.id')"        >> "$GITHUB_OUTPUT"
+          echo "tag=$(echo "$draft_json" | jq -r '.tag_name')" >> "$GITHUB_OUTPUT"
+          echo "found=true" >> "$GITHUB_OUTPUT"
+
+      - id: head_sha
+        name: Resolve default-branch HEAD
+        if: steps.find_draft.outputs.found == 'true'
+        run: |
+          set -euo pipefail
+          sha=$(gh api "repos/$REPO/commits/$DEFAULT_BRANCH" --jq '.sha')
+          if [ -z "$sha" ] || [ "$sha" = "null" ]; then
+            echo "::error::Could not resolve $DEFAULT_BRANCH HEAD via API"
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Publish draft at current HEAD
+        if: steps.find_draft.outputs.found == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRAFT_ID:  ${{ steps.find_draft.outputs.id }}
+          DRAFT_TAG: ${{ steps.find_draft.outputs.tag }}
+          HEAD_SHA:  ${{ steps.head_sha.outputs.sha }}
+        run: |
+          set -euo pipefail
+          # Single PATCH: re-anchor target_commitish at the live HEAD
+          # and flip draft -> false. The tag is created server-side at
+          # the commitish we supply.
+          gh api -X PATCH "repos/$REPO/releases/$DRAFT_ID" \
+            -F draft=false \
+            -F target_commitish="$HEAD_SHA"
+          echo "::notice::Published $DRAFT_TAG at $HEAD_SHA"
