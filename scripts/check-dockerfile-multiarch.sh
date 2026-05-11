@@ -21,9 +21,6 @@ check_file() {
         return 0
     fi
 
-    local content
-    content=$(cat "$file")
-
     local builder_from
     builder_from=$(grep -E '^FROM .* AS [Bb]uilder' "$file" | head -1)
     if [[ -z "$builder_from" ]]; then
@@ -52,6 +49,10 @@ check_file() {
         return 1
     fi
 
+    # File-wide check, not per-instruction: if a Dockerfile has multiple
+    # RUN go build invocations, this only verifies that GOOS/GOARCH appear
+    # *somewhere* in the file, not on the same line as each go build call.
+    # Acceptable here because every Dockerfile in this org has exactly one go build.
     if grep -qE '(^|[[:space:]])go build([[:space:]]|$)' "$file"; then
         if ! grep -qE 'GOOS=\$\{TARGETOS\}.*GOARCH=\$\{TARGETARCH\}|GOARCH=\$\{TARGETARCH\}.*GOOS=\$\{TARGETOS\}' "$file"; then
             echo "FAIL $file: go build present without GOOS=\${TARGETOS} GOARCH=\${TARGETARCH} and no # build-platforms: opt-out"

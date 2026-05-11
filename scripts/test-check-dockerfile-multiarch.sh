@@ -47,7 +47,7 @@ run_case "good"             0 '^PASS '
 run_case "missing-args"     1 'FAIL.*TARGETARCH'
 run_case "no-buildplatform" 1 'FAIL.*BUILDPLATFORM'
 run_case "opt-out-amd64"    0 '^SKIP '
-run_case "missing-goos"     1 'FAIL.*GOOS=\$\{TARGETOS\}|FAIL.*GOARCH=\$\{TARGETARCH\}'
+run_case "missing-goos"     1 'FAIL.*GOOS=\$\{TARGETOS\}.*GOARCH=\$\{TARGETARCH\}'
 
 if [[ "$failures" -gt 0 ]]; then
     echo "$failures test case(s) failed"
