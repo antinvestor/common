@@ -12,6 +12,27 @@ jobs:
         with:
           go-version: stable
           cache: false
+      - name: Provide shared golangci config (SA5011 excluded)
+        # Drop a baseline config unless the repo ships its own. It keeps the
+        # standard linter set (linters.default defaults to "standard") and only
+        # excludes staticcheck SA5011, which false-positives on the idiomatic
+        # `if x == nil { t.Fatal(...) }` test guard — golangci's staticcheck
+        # does not treat t.Fatal/Fatalf as terminating, so it reports a "nil
+        # pointer dereference" on the provably-non-nil deref that follows.
+        run: |
+          if ls .golangci.* >/dev/null 2>&1; then
+            echo "Repo ships its own golangci config; leaving it untouched."
+          else
+            {
+              echo 'version: "2"'
+              echo 'linters:'
+              echo '  exclusions:'
+              echo '    rules:'
+              echo '      - linters: [staticcheck]'
+              echo '        text: "SA5011"'
+            } > .golangci.yml
+            echo "Wrote shared baseline golangci config (standard linters, SA5011 excluded)."
+          fi
       - uses: golangci/golangci-lint-action@v9
         with:
           version: latest
