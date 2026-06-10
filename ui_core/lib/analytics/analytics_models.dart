@@ -4,7 +4,25 @@ import 'package:flutter/material.dart';
 enum MetricTrend { up, down, flat }
 
 /// Time granularity for bucketing time series data.
+///
+/// Names match the Thesa analytics API `step` allowlist exactly.
 enum TimeGranularity { minute, hour, day, week, month, quarter, year }
+
+/// How a metric is aggregated by the analytics backend.
+///
+/// Wire names match the Thesa analytics API `aggregation` values.
+enum AnalyticsAggregation {
+  sum('sum'),
+  avg('avg'),
+  count('count'),
+  countDistinct('count_distinct'),
+  gauge('gauge');
+
+  const AnalyticsAggregation(this.wireName);
+
+  /// The value sent in API request bodies.
+  final String wireName;
+}
 
 /// A single KPI metric value (e.g., "Total Payments: 1,234").
 class MetricValue {
@@ -81,11 +99,7 @@ class DistributionSegment {
 
 /// A ranked item in a top-N list.
 class TopNItem {
-  const TopNItem({
-    required this.label,
-    required this.value,
-    this.metadata,
-  });
+  const TopNItem({required this.label, required this.value, this.metadata});
 
   final String label;
   final double value;
@@ -159,8 +173,8 @@ class AnalyticsTimeRange {
 
   /// Query parameters for HTTP requests.
   Map<String, String> toQueryParams() => {
-        'start': start.toUtc().toIso8601String(),
-        'end': end.toUtc().toIso8601String(),
-        if (granularity != null) 'granularity': granularity!.name,
-      };
+    'start': start.toUtc().toIso8601String(),
+    'end': end.toUtc().toIso8601String(),
+    if (granularity != null) 'granularity': granularity!.name,
+  };
 }

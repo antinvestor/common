@@ -92,8 +92,12 @@ class ServiceTimeSeriesParams {
 }
 
 class ServiceDistributionParams {
-  const ServiceDistributionParams(this.service, this.metric, this.groupBy,
-      {this.timeRange});
+  const ServiceDistributionParams(
+    this.service,
+    this.metric,
+    this.groupBy, {
+    this.timeRange,
+  });
   final String service;
   final String metric;
   final String groupBy;
@@ -115,8 +119,12 @@ class ServiceDistributionParams {
 }
 
 class ServiceTopNParams {
-  const ServiceTopNParams(this.service, this.metric,
-      {this.limit = 10, this.timeRange});
+  const ServiceTopNParams(
+    this.service,
+    this.metric, {
+    this.limit = 10,
+    this.timeRange,
+  });
   final String service;
   final String metric;
   final int limit;
@@ -141,39 +149,50 @@ class ServiceTopNParams {
 
 /// Fetches KPI metrics for a service.
 final serviceMetricsProvider =
-    FutureProvider.family<List<MetricValue>, ServiceMetricsParams>(
-  (ref, params) {
-    final ds = ref.watch(analyticsDataSourceProvider);
-    return ds.getMetrics(params.service, timeRange: params.timeRange);
-  },
-);
+    FutureProvider.family<List<MetricValue>, ServiceMetricsParams>((
+      ref,
+      params,
+    ) {
+      final ds = ref.watch(analyticsDataSourceProvider);
+      return ds.getMetrics(params.service, timeRange: params.timeRange);
+    });
 
 /// Fetches time series data for a service metric.
 final serviceTimeSeriesProvider =
-    FutureProvider.family<List<TimeSeries>, ServiceTimeSeriesParams>(
-  (ref, params) {
-    final ds = ref.watch(analyticsDataSourceProvider);
-    return ds.getTimeSeries(params.service, params.metric,
-        timeRange: params.timeRange);
-  },
-);
+    FutureProvider.family<List<TimeSeries>, ServiceTimeSeriesParams>((
+      ref,
+      params,
+    ) {
+      final ds = ref.watch(analyticsDataSourceProvider);
+      return ds.getTimeSeries(
+        params.service,
+        params.metric,
+        timeRange: params.timeRange,
+      );
+    });
 
 /// Fetches distribution data for a service metric.
 final serviceDistributionProvider =
     FutureProvider.family<List<DistributionSegment>, ServiceDistributionParams>(
-  (ref, params) {
-    final ds = ref.watch(analyticsDataSourceProvider);
-    return ds.getDistribution(params.service, params.metric, params.groupBy,
-        timeRange: params.timeRange);
-  },
-);
+      (ref, params) {
+        final ds = ref.watch(analyticsDataSourceProvider);
+        return ds.getDistribution(
+          params.service,
+          params.metric,
+          params.groupBy,
+          timeRange: params.timeRange,
+        );
+      },
+    );
 
 /// Fetches top-N items for a service metric.
 final serviceTopNProvider =
-    FutureProvider.family<List<TopNItem>, ServiceTopNParams>(
-  (ref, params) {
-    final ds = ref.watch(analyticsDataSourceProvider);
-    return ds.getTopN(params.service, params.metric,
-        limit: params.limit, timeRange: params.timeRange);
-  },
-);
+    FutureProvider.family<List<TopNItem>, ServiceTopNParams>((ref, params) {
+      final ds = ref.watch(analyticsDataSourceProvider);
+      return ds.getTopN(
+        params.service,
+        params.metric,
+        limit: params.limit,
+        timeRange: params.timeRange,
+      );
+    });

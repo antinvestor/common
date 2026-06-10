@@ -2,7 +2,7 @@ name: antinvestor_ui_core
 description: >
   Shared Stitch design system and infrastructure for Antinvestor service UIs.
   Theme, widgets, auth, navigation, API helpers, and routing composition.
-version: 0.4.1
+version: 0.5.0
 repository: https://github.com/antinvestor/common
 homepage: https://github.com/antinvestor/common/tree/main/ui_core
 issue_tracker: https://github.com/antinvestor/common/issues
