@@ -64,11 +64,13 @@ class _TimeRangeSelectorState extends State<TimeRangeSelector> {
     );
     if (picked != null && mounted) {
       setState(() => _selected = TimeRangePreset.custom);
-      widget.onChanged(AnalyticsTimeRange(
-        start: picked.start,
-        end: picked.end,
-        granularity: _inferGranularity(picked.duration),
-      ));
+      widget.onChanged(
+        AnalyticsTimeRange(
+          start: picked.start,
+          end: picked.end,
+          granularity: _inferGranularity(picked.duration),
+        ),
+      );
     }
   }
 
@@ -85,10 +87,7 @@ class _TimeRangeSelectorState extends State<TimeRangeSelector> {
     return SegmentedButton<TimeRangePreset>(
       segments: [
         for (final preset in TimeRangePreset.values)
-          ButtonSegment(
-            value: preset,
-            label: Text(preset.label),
-          ),
+          ButtonSegment(value: preset, label: Text(preset.label)),
       ],
       selected: {_selected},
       onSelectionChanged: (selected) {

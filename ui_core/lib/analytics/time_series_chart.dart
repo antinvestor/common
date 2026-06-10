@@ -52,8 +52,7 @@ class _TimeSeriesChartState extends State<TimeSeriesChart> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
-    if (widget.series.isEmpty ||
-        widget.series.every((s) => s.points.isEmpty)) {
+    if (widget.series.isEmpty || widget.series.every((s) => s.points.isEmpty)) {
       return SizedBox(
         height: widget.height,
         child: Center(
@@ -90,14 +89,17 @@ class _TimeSeriesChartState extends State<TimeSeriesChart> {
                           width: 12,
                           height: 12,
                           decoration: BoxDecoration(
-                            color: widget.series[i].color ??
+                            color:
+                                widget.series[i].color ??
                                 defaultColors[i % defaultColors.length],
                             borderRadius: BorderRadius.circular(3),
                           ),
                         ),
                         const SizedBox(width: 4),
-                        Text(widget.series[i].label,
-                            style: theme.textTheme.labelSmall),
+                        Text(
+                          widget.series[i].label,
+                          style: theme.textTheme.labelSmall,
+                        ),
                       ],
                     ),
                 ],
@@ -106,8 +108,14 @@ class _TimeSeriesChartState extends State<TimeSeriesChart> {
             if (widget.showModeToggle)
               SegmentedButton<ChartMode>(
                 segments: const [
-                  ButtonSegment(value: ChartMode.line, icon: Icon(Icons.show_chart, size: 16)),
-                  ButtonSegment(value: ChartMode.bar, icon: Icon(Icons.bar_chart, size: 16)),
+                  ButtonSegment(
+                    value: ChartMode.line,
+                    icon: Icon(Icons.show_chart, size: 16),
+                  ),
+                  ButtonSegment(
+                    value: ChartMode.bar,
+                    icon: Icon(Icons.bar_chart, size: 16),
+                  ),
                 ],
                 selected: {_mode},
                 onSelectionChanged: (s) => setState(() => _mode = s.first),
@@ -225,8 +233,7 @@ class _TimeSeriesPainter extends CustomPainter {
 
     const gridLines = 4;
     for (var i = 0; i <= gridLines; i++) {
-      final y =
-          chartRect.top + (chartRect.height / gridLines) * i;
+      final y = chartRect.top + (chartRect.height / gridLines) * i;
       canvas.drawLine(
         Offset(chartRect.left, y),
         Offset(chartRect.right, y),
@@ -242,7 +249,10 @@ class _TimeSeriesPainter extends CustomPainter {
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      tp.paint(canvas, Offset(chartRect.left - tp.width - 4, y - tp.height / 2));
+      tp.paint(
+        canvas,
+        Offset(chartRect.left - tp.width - 4, y - tp.height / 2),
+      );
     }
 
     // Draw series
@@ -257,8 +267,15 @@ class _TimeSeriesPainter extends CustomPainter {
         _drawLineSeries(canvas, chartRect, sorted, color, xForTime, yForValue);
       } else {
         _drawBarSeries(
-            canvas, chartRect, sorted, color, xForTime, yForValue, si,
-            series.length);
+          canvas,
+          chartRect,
+          sorted,
+          color,
+          xForTime,
+          yForValue,
+          si,
+          series.length,
+        );
       }
     }
 
@@ -319,10 +336,7 @@ class _TimeSeriesPainter extends CustomPainter {
       ..lineTo(xFor(points.last.timestamp), rect.bottom)
       ..lineTo(xFor(points.first.timestamp), rect.bottom)
       ..close();
-    canvas.drawPath(
-      fillPath,
-      Paint()..color = color.withValues(alpha: 0.08),
-    );
+    canvas.drawPath(fillPath, Paint()..color = color.withValues(alpha: 0.08));
 
     // Dots
     for (final p in points) {
@@ -346,7 +360,8 @@ class _TimeSeriesPainter extends CustomPainter {
   ) {
     if (points.isEmpty) return;
 
-    final maxBarWidth = rect.width / (points.length * seriesCount + points.length);
+    final maxBarWidth =
+        rect.width / (points.length * seriesCount + points.length);
     final barWidth = maxBarWidth.clamp(2.0, 24.0);
     final barPaint = Paint()..color = color;
 
@@ -372,8 +387,9 @@ class _TimeSeriesPainter extends CustomPainter {
     final span = maxTime.difference(minTime);
 
     for (var i = 0; i <= labelCount; i++) {
-      final t =
-          minTime.add(Duration(milliseconds: (span.inMilliseconds * i / labelCount).round()));
+      final t = minTime.add(
+        Duration(milliseconds: (span.inMilliseconds * i / labelCount).round()),
+      );
       final x = rect.left + (rect.width * i / labelCount);
 
       final label = _formatTimeLabel(t);
@@ -399,8 +415,18 @@ class _TimeSeriesPainter extends CustomPainter {
       case TimeGranularity.month:
       case TimeGranularity.quarter:
         const months = [
-          'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+          'Jan',
+          'Feb',
+          'Mar',
+          'Apr',
+          'May',
+          'Jun',
+          'Jul',
+          'Aug',
+          'Sep',
+          'Oct',
+          'Nov',
+          'Dec',
         ];
         return months[t.month - 1];
       case TimeGranularity.year:
@@ -419,7 +445,5 @@ class _TimeSeriesPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _TimeSeriesPainter old) =>
-      old.hoverX != hoverX ||
-      old.series != series ||
-      old.mode != mode;
+      old.hoverX != hoverX || old.series != series || old.mode != mode;
 }

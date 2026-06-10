@@ -5,12 +5,7 @@ import 'metric_card.dart';
 
 /// A ranked list of top-N items with value bars and optional metadata chips.
 class TopNList extends StatelessWidget {
-  const TopNList({
-    super.key,
-    required this.items,
-    this.title,
-    this.onViewAll,
-  });
+  const TopNList({super.key, required this.items, this.title, this.onViewAll});
 
   final List<TopNItem> items;
   final String? title;
@@ -30,8 +25,10 @@ class TopNList extends StatelessWidget {
       );
     }
 
-    final maxValue =
-        items.fold(0.0, (m, item) => item.value > m ? item.value : m);
+    final maxValue = items.fold(
+      0.0,
+      (m, item) => item.value > m ? item.value : m,
+    );
 
     return Container(
       decoration: BoxDecoration(
@@ -52,8 +49,9 @@ class TopNList extends StatelessWidget {
                     Expanded(
                       child: Text(
                         title!,
-                        style: theme.textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w600),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   if (onViewAll != null)
@@ -70,8 +68,7 @@ class TopNList extends StatelessWidget {
             final fraction = maxValue > 0 ? item.value / maxValue : 0.0;
 
             return Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
               child: Row(
                 children: [
                   // Rank
@@ -94,26 +91,31 @@ class TopNList extends StatelessWidget {
                         Text(
                           item.label,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w500),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
-                        if (item.metadata != null &&
-                            item.metadata!.isNotEmpty)
+                        if (item.metadata != null && item.metadata!.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 2),
                             child: Wrap(
                               spacing: 6,
                               children: item.metadata!.entries
-                                  .map((e) => Chip(
-                                        materialTapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                        visualDensity: VisualDensity.compact,
-                                        labelPadding: EdgeInsets.zero,
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 6),
-                                        label: Text('${e.key}: ${e.value}',
-                                            style: theme.textTheme.labelSmall),
-                                      ))
+                                  .map(
+                                    (e) => Chip(
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      visualDensity: VisualDensity.compact,
+                                      labelPadding: EdgeInsets.zero,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                      ),
+                                      label: Text(
+                                        '${e.key}: ${e.value}',
+                                        style: theme.textTheme.labelSmall,
+                                      ),
+                                    ),
+                                  )
                                   .toList(),
                             ),
                           ),
@@ -139,10 +141,8 @@ class TopNList extends StatelessWidget {
                           child: LinearProgressIndicator(
                             value: fraction,
                             minHeight: 4,
-                            backgroundColor:
-                                cs.primary.withValues(alpha: 0.08),
-                            valueColor:
-                                AlwaysStoppedAnimation(cs.primary),
+                            backgroundColor: cs.primary.withValues(alpha: 0.08),
+                            valueColor: AlwaysStoppedAnimation(cs.primary),
                           ),
                         ),
                       ],

@@ -70,6 +70,8 @@ export 'logging/app_logger.dart';
 export 'analytics/analytics_models.dart';
 export 'analytics/analytics_provider.dart';
 export 'analytics/analytics_dashboard.dart';
+export 'analytics/service_analytics_spec.dart';
+export 'analytics/thesa_analytics_data_source.dart';
 export 'analytics/metric_card.dart';
 export 'analytics/metrics_row.dart';
 export 'analytics/time_series_chart.dart';

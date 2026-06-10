@@ -26,21 +26,31 @@ class ChartConfig {
     this.metric, {
     required this.label,
     this.granularity,
-  })  : type = ChartType.timeSeries,
-        groupBy = null;
+    this.aggregation = AnalyticsAggregation.sum,
+    this.filters,
+  }) : type = ChartType.timeSeries,
+       groupBy = null;
 
   const ChartConfig.distribution(
     this.metric, {
     required this.label,
     required this.groupBy,
-  })  : type = ChartType.distribution,
-        granularity = null;
+    this.aggregation = AnalyticsAggregation.sum,
+    this.filters,
+  }) : type = ChartType.distribution,
+       granularity = null;
 
   final ChartType type;
   final String metric;
   final String label;
   final String? groupBy;
   final TimeGranularity? granularity;
+
+  /// How the backend aggregates the metric for this chart.
+  final AnalyticsAggregation aggregation;
+
+  /// Extra label filters applied alongside the service's base filters.
+  final Map<String, String>? filters;
 }
 
 /// Declarative table configuration for the dashboard.
@@ -49,11 +59,24 @@ class TableConfig {
     this.metric, {
     required this.label,
     this.limit = 10,
+    this.groupBy,
+    this.aggregation = AnalyticsAggregation.sum,
+    this.filters,
   });
 
   final String metric;
   final String label;
   final int limit;
+
+  /// Dimension to rank by. Required by the Thesa top-N endpoint; data
+  /// sources that query Thesa reject top-N specs without it.
+  final String? groupBy;
+
+  /// How the backend aggregates the metric for this table.
+  final AnalyticsAggregation aggregation;
+
+  /// Extra label filters applied alongside the service's base filters.
+  final Map<String, String>? filters;
 }
 
 // ---------------------------------------------------------------------------
@@ -112,8 +135,7 @@ class AnalyticsDashboard extends ConsumerStatefulWidget {
   final List<Widget>? actions;
 
   @override
-  ConsumerState<AnalyticsDashboard> createState() =>
-      _AnalyticsDashboardState();
+  ConsumerState<AnalyticsDashboard> createState() => _AnalyticsDashboardState();
 }
 
 class _AnalyticsDashboardState extends ConsumerState<AnalyticsDashboard> {
@@ -215,14 +237,14 @@ class _AnalyticsDashboardState extends ConsumerState<AnalyticsDashboard> {
                 isLoading: true,
                 skeletonCount: widget.metrics.length.clamp(1, 4),
               ),
-              error: (e, _) => _ErrorCard(message: 'Failed to load metrics: $e'),
+              error: (e, _) =>
+                  _ErrorCard(message: 'Failed to load metrics: $e'),
             ),
 
           if (widget.metrics.isNotEmpty) const SizedBox(height: 20),
 
           // Charts in responsive grid
-          if (widget.charts.isNotEmpty)
-            _buildChartsGrid(isDesktop, cs, theme),
+          if (widget.charts.isNotEmpty) _buildChartsGrid(isDesktop, cs, theme),
 
           if (widget.charts.isNotEmpty) const SizedBox(height: 20),
 
@@ -334,8 +356,9 @@ class _ChartSection extends ConsumerWidget {
         children: [
           Text(
             config.label,
-            style: theme.textTheme.titleMedium
-                ?.copyWith(fontWeight: FontWeight.w600),
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: 16),
           if (config.type == ChartType.timeSeries)
@@ -403,8 +426,12 @@ class _TopNSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(
       serviceTopNProvider(
-        ServiceTopNParams(service, config.metric,
-            limit: config.limit, timeRange: timeRange),
+        ServiceTopNParams(
+          service,
+          config.metric,
+          limit: config.limit,
+          timeRange: timeRange,
+        ),
       ),
     );
     return async.when(

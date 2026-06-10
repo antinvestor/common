@@ -74,15 +74,20 @@ class MetricCard extends StatelessWidget {
                     color: cs.tertiary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(metric.icon,
-                      size: compact ? 14 : 18, color: cs.tertiary),
+                  child: Icon(
+                    metric.icon,
+                    size: compact ? 14 : 18,
+                    color: cs.tertiary,
+                  ),
                 ),
               const Spacer(),
               if (changePercent != null)
                 Flexible(
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: trendColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(6),
@@ -111,16 +116,18 @@ class MetricCard extends StatelessWidget {
           SizedBox(height: compact ? 8 : 12),
           Text(
             metric.label,
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: cs.onSurfaceVariant),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: cs.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
             formattedValue,
-            style: (compact
-                    ? theme.textTheme.titleLarge
-                    : theme.textTheme.headlineMedium)
-                ?.copyWith(fontWeight: FontWeight.w700),
+            style:
+                (compact
+                        ? theme.textTheme.titleLarge
+                        : theme.textTheme.headlineMedium)
+                    ?.copyWith(fontWeight: FontWeight.w700),
           ),
         ],
       ),

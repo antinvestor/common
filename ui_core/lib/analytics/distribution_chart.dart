@@ -76,12 +76,16 @@ class DistributionChart extends StatelessWidget {
                       children: [
                         Text(
                           _formatTotal(total),
-                          style: theme.textTheme.headlineSmall
-                              ?.copyWith(fontWeight: FontWeight.w700),
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                        Text('Total',
-                            style: theme.textTheme.labelSmall
-                                ?.copyWith(color: cs.onSurfaceVariant)),
+                        Text(
+                          'Total',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
                       ],
                     ),
                   ),
