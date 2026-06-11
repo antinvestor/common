@@ -44,6 +44,20 @@ String formatMoney(dynamic money) {
   return '${m.currencyCode} $formatted';
 }
 
+/// Formats a *flattened* money triple — `currencyCode` + `units` + `nanos` as
+/// emitted by report/response messages that don't nest a `Money` — into a
+/// fixed 2-decimal string with an optional currency prefix (e.g. `KES 12.50`).
+///
+/// [units] accepts either an `int` or a `fixnum.Int64` (report SDKs vary).
+/// Unlike [formatMoney], a zero amount renders as `0.00` (not `—`), matching
+/// how analytics/report screens display totals.
+String formatMoneyAmount(String currencyCode, dynamic units, int nanos) {
+  final unitsInt = units is Int64 ? units.toInt() : (units as int);
+  final amount = unitsInt + nanos / 1e9;
+  final code = currencyCode.isNotEmpty ? '$currencyCode ' : '';
+  return '$code${amount.toStringAsFixed(2)}';
+}
+
 /// Creates a [Money] (`antinvestor_api_common.Money`) from a decimal string
 /// and currency code.
 ///
