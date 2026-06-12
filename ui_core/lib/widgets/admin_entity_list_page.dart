@@ -60,6 +60,7 @@ class AdminEntityListPage<T> extends StatefulWidget {
     this.actions,
     this.onSearch,
     this.searchHint,
+    this.filters,
     this.onAdd,
     this.addLabel,
     this.onRowNavigate,
@@ -84,6 +85,11 @@ class AdminEntityListPage<T> extends StatefulWidget {
   final List<Widget>? actions;
   final ValueChanged<String>? onSearch;
   final String? searchHint;
+
+  /// Optional filter widget (e.g. a chip row) rendered directly below the
+  /// header/search, so per-page filters sit under the breadcrumb rather
+  /// than floating above it.
+  final Widget? filters;
   final VoidCallback? onAdd;
   final String? addLabel;
 
@@ -277,6 +283,12 @@ class _AdminEntityListPageState<T> extends State<AdminEntityListPage<T>> {
                               ),
                             ),
                           ),
+                        // Optional per-page filters (e.g. chip rows),
+                        // below the header so they sit under the breadcrumb.
+                        if (widget.filters != null) ...[
+                          widget.filters!,
+                          const SizedBox(height: 16),
+                        ],
                         // Paginated data table + footer
                         ..._buildPaginatedTable(
                             theme, surfaceColor, borderColor),
