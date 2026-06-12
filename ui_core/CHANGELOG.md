@@ -1,3 +1,9 @@
+## 0.5.1
+
+- `AdminEntityListPage` gains an optional `filters` slot, rendered below
+  the header/search so per-page filter chips sit under the breadcrumb
+  instead of floating above the page. Backwards compatible (defaults to none).
+
 ## 0.5.0
 
 - Add `ThesaAnalyticsDataSource`, the standard `AnalyticsDataSource` backed
