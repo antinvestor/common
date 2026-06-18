@@ -28,7 +28,7 @@ func TestRenderCreateHypertable_IncludesTimeColumnAndChunk(t *testing.T) {
 		TimeColumn:    "created_at",
 		ChunkInterval: 7 * 24 * time.Hour,
 	})
-	want := "SELECT create_hypertable('login_events', 'created_at', chunk_time_interval => INTERVAL '604800 seconds', if_not_exists => TRUE, create_default_indexes => FALSE);"
+	want := "SELECT create_hypertable('login_events', 'created_at', chunk_time_interval => INTERVAL '604800 seconds', if_not_exists => TRUE, migrate_data => TRUE, create_default_indexes => FALSE);"
 	if got != want {
 		t.Fatalf("mismatch:\n  got: %s\n want: %s", got, want)
 	}

@@ -65,10 +65,11 @@ func Validate(h Hypertable) error {
 }
 
 // RenderCreateHypertable returns the SQL that converts a plain table into a
-// hypertable. Idempotent via if_not_exists => TRUE.
+// hypertable. Idempotent via if_not_exists => TRUE. migrate_data => TRUE is
+// required when an existing plain table already contains rows.
 func RenderCreateHypertable(h Hypertable) string {
 	return fmt.Sprintf(
-		"SELECT create_hypertable('%s', '%s', chunk_time_interval => INTERVAL '%d seconds', if_not_exists => TRUE, create_default_indexes => FALSE);",
+		"SELECT create_hypertable('%s', '%s', chunk_time_interval => INTERVAL '%d seconds', if_not_exists => TRUE, migrate_data => TRUE, create_default_indexes => FALSE);",
 		h.Table, h.TimeColumn, int(h.ChunkInterval.Seconds()),
 	)
 }
