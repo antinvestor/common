@@ -1,4 +1,4 @@
-module github.com/antinvestor/common
+module github.com/antinvestor/common/v2
 
 go 1.26
 

@@ -18,7 +18,7 @@ import (
 	"context"
 
 	"connectrpc.com/connect"
-	"github.com/antinvestor/common"
+	"github.com/antinvestor/common/v2"
 )
 
 // ConnectServiceClientFactory builds a generated Connect client from a resolved transport.

@@ -23,7 +23,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/antinvestor/common/connection/options"
+	"github.com/antinvestor/common/v2/connection/options"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"github.com/spiffe/go-spiffe/v2/workloadapi"

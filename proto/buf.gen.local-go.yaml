@@ -1,9 +1,9 @@
 version: v2
-# Local-Go template used to refresh github.com/antinvestor/common/v1/*.pb.go
+# Local-Go template used to refresh github.com/antinvestor/common/v2/v1/*.pb.go
 # for services that import the common Go module directly (alongside BSR).
 # Run via: cd proto && buf generate --template buf.gen.local-go.yaml
 plugins:
   - remote: buf.build/protocolbuffers/go:v1.36.11
     out: ..
     opt:
-      - module=github.com/antinvestor/common
+      - module=github.com/antinvestor/common/v2

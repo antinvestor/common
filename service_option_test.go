@@ -18,8 +18,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/antinvestor/common"
-	"github.com/antinvestor/common/connection/options"
+	"github.com/antinvestor/common/v2"
+	"github.com/antinvestor/common/v2/connection/options"
+	"github.com/antinvestor/common/v2/servicecatalog"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -52,6 +53,10 @@ func (c testInternalServiceConfig) GetOauth2ServiceClientSecret() string {
 	return c.clientSecret
 }
 
+func (c testInternalServiceConfig) GetOauth2AudienceBaseURL() string {
+	return "https://api.example.org"
+}
+
 func (c testInternalServiceConfig) GetOauth2TokenEndpointAuthMethod() string {
 	return c.tokenEndpointAuthMethod
 }
@@ -62,6 +67,20 @@ func (c testInternalServiceConfig) GetOauth2PrivateKeyJWTConfig() *common.Privat
 
 type pointerOnlyInternalServiceConfig struct {
 	testInternalServiceConfig
+}
+
+type oauthConfigWithoutAudienceBase struct{}
+
+func (oauthConfigWithoutAudienceBase) GetOauth2TokenEndpoint() string {
+	return "https://issuer.example.org/oauth2/token"
+}
+
+func (oauthConfigWithoutAudienceBase) GetOauth2ServiceClientID() string {
+	return "svc-client"
+}
+
+func (oauthConfigWithoutAudienceBase) GetOauth2ServiceClientSecret() string {
+	return "secret"
 }
 
 func (c *pointerOnlyInternalServiceConfig) GetTrustedDomain() string {
@@ -89,15 +108,15 @@ func (c *pointerOnlyInternalServiceConfig) GetOauth2PrivateKeyJWTConfig() *commo
 }
 
 type foreignPrivateKeyJWTConfig struct {
-	PrivateKeyPEM  []byte
-	PrivateKeyPath string
-	Source         string
-	SPIFFEID       string
-	Hint           string
-	KeyID          string
-	Audience       string
-	Issuer         string
-	Subject        string
+	PrivateKeyPEM           []byte
+	PrivateKeyPath          string
+	Source                  string
+	SPIFFEID                string
+	Hint                    string
+	KeyID                   string
+	ClientAssertionAudience string
+	Issuer                  string
+	Subject                 string
 }
 
 type foreignPrivateKeyJWTProviderConfig struct {
@@ -122,9 +141,9 @@ func (s *InternalServiceSuite) TestClientOptionsWithClientSecret() {
 	}
 
 	opts, err := common.ClientOptions(s.T().Context(), cfg, common.ServiceTarget{
+		ServiceID:             servicecatalog.ServiceProfile,
 		Endpoint:              "profile.default.svc.cluster.local:8443",
 		WorkloadAPITargetPath: "/ns/profile/sa/service-profile",
-		Audiences:             []string{"service_profile"},
 	})
 	s.Require().NoError(err)
 
@@ -134,7 +153,7 @@ func (s *InternalServiceSuite) TestClientOptionsWithClientSecret() {
 	s.Equal(cfg.clientID, dial.TokenUserName)
 	s.Equal(cfg.clientSecret, dial.TokenPassword)
 	s.Equal(common.TokenEndpointAuthMethodClientSecretBasic, dial.TokenEndpointAuthMethod)
-	s.Equal([]string{"service_profile"}, dial.Audiences)
+	s.Equal([]string{"https://api.example.org/profile"}, dial.RequestedAudiences)
 
 	httpCfg := applyHTTPOptions(dial.HTTPDialOpts)
 	s.Equal("example.org", httpCfg.WorkloadAPITrustDomain)
@@ -154,10 +173,10 @@ func (s *InternalServiceSuite) TestClientOptionsWithPrivateKeyJWT() {
 	}
 
 	opts, err := common.ClientOptions(s.T().Context(), cfg, common.ServiceTarget{
+		ServiceID:             servicecatalog.ServiceProfile,
 		Endpoint:              "http://profile.default.svc.cluster.local",
 		WorkloadAPITargetPath: "/ns/profile/sa/service-profile",
 		Scopes:                []string{"system_int", "profile.read"},
-		Audiences:             []string{"service_profile"},
 	})
 	s.Require().NoError(err)
 
@@ -184,7 +203,8 @@ func (s *InternalServiceSuite) TestClientOptionsWithPrivateKeyJWTWorkloadAPI() {
 	}
 
 	opts, err := common.ClientOptions(s.T().Context(), cfg, common.ServiceTarget{
-		Endpoint: "http://profile.default.svc.cluster.local",
+		ServiceID: servicecatalog.ServiceProfile,
+		Endpoint:  "http://profile.default.svc.cluster.local",
 	})
 	s.Require().NoError(err)
 
@@ -204,16 +224,17 @@ func (s *InternalServiceSuite) TestClientOptionsWithForeignPrivateKeyJWTConfig()
 			tokenEndpointAuthMethod: common.TokenEndpointAuthMethodPrivateKeyJWT,
 		},
 		privateKeyJWT: &foreignPrivateKeyJWTConfig{
-			Source:   common.PrivateKeyJWTSourceWorkloadAPI,
-			SPIFFEID: "spiffe://example.org/ns/default/sa/service-authentication",
-			Hint:     "internal",
-			KeyID:    "kid-1",
-			Audience: "https://issuer.example.org/oauth2/token",
+			Source:                  common.PrivateKeyJWTSourceWorkloadAPI,
+			SPIFFEID:                "spiffe://example.org/ns/default/sa/service-authentication",
+			Hint:                    "internal",
+			KeyID:                   "kid-1",
+			ClientAssertionAudience: "https://issuer.example.org/oauth2/token",
 		},
 	}
 
 	opts, err := common.ClientOptions(s.T().Context(), cfg, common.ServiceTarget{
-		Endpoint: "http://profile.default.svc.cluster.local",
+		ServiceID: servicecatalog.ServiceProfile,
+		Endpoint:  "http://profile.default.svc.cluster.local",
 	})
 	s.Require().NoError(err)
 
@@ -223,7 +244,7 @@ func (s *InternalServiceSuite) TestClientOptionsWithForeignPrivateKeyJWTConfig()
 	s.Equal("spiffe://example.org/ns/default/sa/service-authentication", dial.PrivateKeyJWT.SPIFFEID)
 	s.Equal("internal", dial.PrivateKeyJWT.Hint)
 	s.Equal("kid-1", dial.PrivateKeyJWT.KeyID)
-	s.Equal("https://issuer.example.org/oauth2/token", dial.PrivateKeyJWT.Audience)
+	s.Equal("https://issuer.example.org/oauth2/token", dial.PrivateKeyJWT.ClientAssertionAudience)
 }
 
 func (s *InternalServiceSuite) TestClientOptionsPrivateKeyJWTRequiresKeyConfig() {
@@ -251,9 +272,9 @@ func (s *InternalServiceSuite) TestClientOptionsAllowsValueConfigWithPointerRece
 	}
 
 	opts, err := common.ClientOptions(s.T().Context(), cfg, common.ServiceTarget{
+		ServiceID:             servicecatalog.ServiceProfile,
 		Endpoint:              "profile.default.svc.cluster.local",
 		WorkloadAPITargetPath: "/ns/profile/sa/service-profile",
-		Audiences:             []string{"service_profile"},
 	})
 	s.Require().NoError(err)
 
@@ -286,6 +307,40 @@ func (s *InternalServiceSuite) TestClientOptionsWithoutAuthenticationSkipsAutoOA
 	s.Empty(dial.TokenPassword)
 }
 
+func (s *InternalServiceSuite) TestClientOptionsRequiresRegisteredServiceIdentity() {
+	cfg := testInternalServiceConfig{
+		tokenEndpoint: "https://issuer.example.org/oauth2/token",
+		clientID:      "svc-client",
+		clientSecret:  "secret",
+	}
+
+	_, err := common.ClientOptions(s.T().Context(), cfg, common.ServiceTarget{
+		Endpoint: "profile.default.svc.cluster.local",
+	})
+	s.Require().Error(err)
+	s.ErrorContains(err, "unknown service ID")
+
+	_, err = common.ClientOptions(s.T().Context(), cfg, common.ServiceTarget{
+		ServiceID: "service_profile",
+		Endpoint:  "profile.default.svc.cluster.local",
+	})
+	s.Require().Error(err)
+	s.ErrorContains(err, "unknown service ID")
+}
+
+func (s *InternalServiceSuite) TestClientOptionsRequiresAudienceBaseConfiguration() {
+	_, err := common.ClientOptions(
+		s.T().Context(),
+		oauthConfigWithoutAudienceBase{},
+		common.ServiceTarget{
+			ServiceID: servicecatalog.ServiceProfile,
+			Endpoint:  "profile.default.svc.cluster.local",
+		},
+	)
+	s.Require().Error(err)
+	s.ErrorContains(err, "oauth2 audience base URL configuration is required")
+}
+
 func (s *InternalServiceSuite) TestNewServiceClientBuildsClientWithResolvedOptions() {
 	cfg := testInternalServiceConfig{
 		trustedDomain: "example.org",
@@ -299,16 +354,16 @@ func (s *InternalServiceSuite) TestNewServiceClientBuildsClientWithResolvedOptio
 	}
 
 	client, err := common.NewServiceClient(s.T().Context(), cfg, common.ServiceTarget{
+		ServiceID:             servicecatalog.ServiceProfile,
 		Endpoint:              "http://profile.default.svc.cluster.local",
 		WorkloadAPITargetPath: "/ns/profile/sa/service-profile",
-		Audiences:             []string{"service_profile"},
 	}, func(_ context.Context, opts ...common.ClientOption) (*constructedClient, error) {
 		return &constructedClient{settings: applyClientOptions(opts)}, nil
 	})
 	s.Require().NoError(err)
 	s.Require().NotNil(client)
 	s.Equal("https://profile.default.svc.cluster.local", client.settings.Endpoint)
-	s.Equal([]string{"service_profile"}, client.settings.Audiences)
+	s.Equal([]string{"https://api.example.org/profile"}, client.settings.RequestedAudiences)
 }
 
 func (s *InternalServiceSuite) TestResolveServiceTargetRejectsAmbiguousWorkloadAPITargets() {
@@ -331,20 +386,20 @@ func (s *InternalServiceSuite) TestResolveServiceTargetClearsTargetPathWithoutTr
 	s.Equal("profile.default.svc.cluster.local", target.Endpoint)
 }
 
-func (s *InternalServiceSuite) TestResolveServiceTargetNormalizesDuplicateScopesAndAudiences() {
+func (s *InternalServiceSuite) TestResolveServiceTargetNormalizesScopesAndValidatesService() {
 	target, err := common.ResolveServiceTarget(
 		testInternalServiceConfig{trustedDomain: "example.org"},
 		common.ServiceTarget{
+			ServiceID:             servicecatalog.ServiceProfile,
 			Endpoint:              "  profile.default.svc.cluster.local  ",
 			WorkloadAPITargetPath: " /ns/profile/sa/service-profile ",
-			Audiences:             []string{"service_profile", "service_profile", " "},
 			Scopes:                []string{"system_int", "profile.read", "system_int", ""},
 		},
 	)
 	s.Require().NoError(err)
 	s.Equal("profile.default.svc.cluster.local", target.Endpoint)
 	s.Equal("/ns/profile/sa/service-profile", target.WorkloadAPITargetPath)
-	s.Equal([]string{"service_profile"}, target.Audiences)
+	s.Equal(servicecatalog.ServiceProfile, target.ServiceID)
 	s.Equal([]string{"system_int", "profile.read"}, target.Scopes)
 }
 

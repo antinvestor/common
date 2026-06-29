@@ -22,7 +22,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/antinvestor/common/connection/options"
+	"github.com/antinvestor/common/v2/connection/options"
+	"github.com/antinvestor/common/v2/servicecatalog"
 )
 
 const (
@@ -53,13 +54,17 @@ type OAuth2PrivateKeyJWTConfig interface {
 	GetOauth2PrivateKeyJWTConfig() *PrivateKeyJWTConfig
 }
 
+type OAuth2AudienceBaseURLConfig interface {
+	GetOauth2AudienceBaseURL() string
+}
+
 // ServiceTarget describes a downstream service and how it should be reached.
 // Use either WorkloadAPITargetID or WorkloadAPITargetPath when SPIFFE mTLS is required.
 type ServiceTarget struct {
+	ServiceID             servicecatalog.ServiceID
 	Endpoint              string
 	WorkloadAPITargetID   string
 	WorkloadAPITargetPath string
-	Audiences             []string
 	Scopes                []string
 }
 
@@ -119,15 +124,25 @@ func ClientOptions(
 			return nil, oauthErr
 		}
 		opts = append(opts, oauth2Opts...)
+
+		audienceCfg, audienceCfgOK := oauth2AudienceBaseURLConfig(cfg)
+		if !audienceCfgOK {
+			return nil, errors.New("oauth2 audience base URL configuration is required")
+		}
+		catalog, catalogErr := servicecatalog.New(audienceCfg.GetOauth2AudienceBaseURL())
+		if catalogErr != nil {
+			return nil, catalogErr
+		}
+		audience, audienceErr := catalog.Audience(resolvedTarget.ServiceID)
+		if audienceErr != nil {
+			return nil, audienceErr
+		}
+		opts = append(opts, WithRequestedAudiences(audience))
 	}
 
 	if len(resolvedTarget.Scopes) > 0 {
 		opts = append(opts, WithScopes(resolvedTarget.Scopes...))
 	}
-	if len(resolvedTarget.Audiences) > 0 {
-		opts = append(opts, WithAudiences(resolvedTarget.Audiences...))
-	}
-
 	return append(opts, extraOpts...), nil
 }
 
@@ -262,15 +277,20 @@ func trustDomain(cfg WorkloadAPIConfig) string {
 
 func resolveServiceTarget(cfg any, target ServiceTarget) (ServiceTarget, error) {
 	resolved := ServiceTarget{
+		ServiceID:             servicecatalog.ServiceID(strings.TrimSpace(string(target.ServiceID))),
 		Endpoint:              strings.TrimSpace(target.Endpoint),
 		WorkloadAPITargetID:   strings.TrimSpace(target.WorkloadAPITargetID),
 		WorkloadAPITargetPath: strings.TrimSpace(target.WorkloadAPITargetPath),
-		Audiences:             normalizedStrings(target.Audiences),
 		Scopes:                normalizedStrings(target.Scopes),
 	}
 
 	if resolved.Endpoint == "" {
 		return ServiceTarget{}, errors.New("service endpoint is required")
+	}
+	if resolved.ServiceID != "" {
+		if _, err := servicecatalog.DefinitionFor(resolved.ServiceID); err != nil {
+			return ServiceTarget{}, err
+		}
 	}
 
 	if resolved.WorkloadAPITargetID != "" && resolved.WorkloadAPITargetPath != "" {
@@ -284,6 +304,11 @@ func resolveServiceTarget(cfg any, target ServiceTarget) (ServiceTarget, error) 
 	}
 
 	return resolved, nil
+}
+
+func oauth2AudienceBaseURLConfig(cfg any) (OAuth2AudienceBaseURLConfig, bool) {
+	provider, ok := cfg.(OAuth2AudienceBaseURLConfig)
+	return provider, ok && provider != nil
 }
 
 func normalizedStrings(values []string) []string {
@@ -478,8 +503,8 @@ func buildPrivateKeyJWTConfigFromStruct(value reflect.Value) *PrivateKeyJWTConfi
 	if field, ok := stringField(value, "KeyID"); ok {
 		cfg.KeyID = field
 	}
-	if field, ok := stringField(value, "Audience"); ok {
-		cfg.Audience = field
+	if field, ok := stringField(value, "ClientAssertionAudience"); ok {
+		cfg.ClientAssertionAudience = field
 	}
 	if field, ok := stringField(value, "Issuer"); ok {
 		cfg.Issuer = field

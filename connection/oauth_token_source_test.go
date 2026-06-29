@@ -24,9 +24,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/antinvestor/common"
-	commonconnection "github.com/antinvestor/common/connection"
-	"github.com/antinvestor/common/connection/options"
+	"github.com/antinvestor/common/v2"
+	commonconnection "github.com/antinvestor/common/v2/connection"
+	"github.com/antinvestor/common/v2/connection/options"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/suite"
 )
@@ -78,7 +78,7 @@ func (s *OAuthTokenSourceSuite) TestNewOAuth2TokenSourcePrivateKeyJWT() {
 		s.Equal("svc-client", r.Form.Get("client_id"))
 		s.Equal(privateKeyJWTAssertionType, r.Form.Get("client_assertion_type"))
 		s.Equal("system_int profile.read", r.Form.Get("scope"))
-		s.Equal("service_profile", r.Form.Get("audience"))
+		s.Equal("https://api.example.org/profile", r.Form.Get("audience"))
 
 		parsedToken, err := jwt.Parse(r.Form.Get("client_assertion"), func(_ *jwt.Token) (interface{}, error) {
 			return &s.privateKey.PublicKey, nil
@@ -109,7 +109,7 @@ func (s *OAuthTokenSourceSuite) TestNewOAuth2TokenSourcePrivateKeyJWT() {
 		TokenEndpointAuthMethod: common.TokenEndpointAuthMethodPrivateKeyJWT,
 		TokenUserName:           "svc-client",
 		Scopes:                  []string{"system_int", "profile.read"},
-		Audiences:               []string{"service_profile"},
+		RequestedAudiences:      []string{"https://api.example.org/profile"},
 		PrivateKeyJWT: &common.PrivateKeyJWTConfig{
 			PrivateKeyPEM: s.privateKeyPEM,
 			KeyID:         "kid-1",
@@ -146,7 +146,7 @@ func (s *OAuthTokenSourceSuite) TestNewOAuth2TokenSourceUsesClientSecretPost() {
 		s.Equal("svc-client", r.Form.Get("client_id"))
 		s.Equal("secret", r.Form.Get("client_secret"))
 		s.Equal("system_int", r.Form.Get("scope"))
-		s.Equal("service_profile", r.Form.Get("audience"))
+		s.Equal("https://api.example.org/profile", r.Form.Get("audience"))
 
 		w.Header().Set("Content-Type", "application/json")
 		_, err = w.Write([]byte(`{"access_token":"token-456","token_type":"Bearer","expires_in":60}`))
@@ -155,12 +155,12 @@ func (s *OAuthTokenSourceSuite) TestNewOAuth2TokenSourceUsesClientSecretPost() {
 	defer server.Close()
 
 	ds := &common.DialSettings{
-		TokenEndpoint:           server.URL,
-		TokenEndpointAuthMethod: common.TokenEndpointAuthMethodClientSecretPost,
-		TokenUserName:           "svc-client",
-		TokenPassword:           "secret",
-		DefaultScopes:           []string{"system_int"},
-		DefaultAudience:         "service_profile",
+		TokenEndpoint:            server.URL,
+		TokenEndpointAuthMethod:  common.TokenEndpointAuthMethodClientSecretPost,
+		TokenUserName:            "svc-client",
+		TokenPassword:            "secret",
+		DefaultScopes:            []string{"system_int"},
+		DefaultRequestedAudience: "https://api.example.org/profile",
 	}
 
 	tokenSource, err := commonconnection.NewOAuth2TokenSource(context.Background(), ds, server.Client())
@@ -171,7 +171,7 @@ func (s *OAuthTokenSourceSuite) TestNewOAuth2TokenSourceUsesClientSecretPost() {
 	s.Equal("token-456", token.AccessToken)
 }
 
-func (s *OAuthTokenSourceSuite) TestPrivateKeyJWTTokenSourceHonorsCustomAudience() {
+func (s *OAuthTokenSourceSuite) TestPrivateKeyJWTTokenSourceHonorsCustomClientAssertionAudience() {
 	var parsedClaims jwt.MapClaims
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		err := r.ParseForm()
@@ -205,8 +205,8 @@ func (s *OAuthTokenSourceSuite) TestPrivateKeyJWTTokenSourceHonorsCustomAudience
 		TokenEndpoint: server.URL,
 		TokenUserName: "svc-client",
 		PrivateKeyJWT: &common.PrivateKeyJWTConfig{
-			PrivateKeyPEM: s.privateKeyPEM,
-			Audience:      "https://issuer.example.org/",
+			PrivateKeyPEM:           s.privateKeyPEM,
+			ClientAssertionAudience: "https://issuer.example.org/oauth2/token",
 		},
 	}, server.Client())
 	s.Require().NoError(err)
@@ -214,5 +214,5 @@ func (s *OAuthTokenSourceSuite) TestPrivateKeyJWTTokenSourceHonorsCustomAudience
 	token, err := source.Token()
 	s.Require().NoError(err)
 	s.Equal("token-789", token.AccessToken)
-	s.Equal("https://issuer.example.org/", parsedClaims["aud"])
+	s.Equal("https://issuer.example.org/oauth2/token", parsedClaims["aud"])
 }
