@@ -121,8 +121,8 @@ const file_common_v1_money_proto_rawDesc = "" +
 	"\x05Money\x12#\n" +
 	"\rcurrency_code\x18\x01 \x01(\tR\fcurrencyCode\x12\x14\n" +
 	"\x05units\x18\x02 \x01(\x03R\x05units\x12\x14\n" +
-	"\x05nanos\x18\x03 \x01(\x05R\x05nanosB:\n" +
-	"\bcommonv1P\x01Z)github.com/antinvestor/common/v1;commonv1\xf8\x01\x01b\x06proto3"
+	"\x05nanos\x18\x03 \x01(\x05R\x05nanosB=\n" +
+	"\bcommonv1P\x01Z,github.com/antinvestor/common/v2/v1;commonv1\xf8\x01\x01b\x06proto3"
 
 var (
 	file_common_v1_money_proto_rawDescOnce sync.Once

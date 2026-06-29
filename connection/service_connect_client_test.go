@@ -22,8 +22,8 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
-	"github.com/antinvestor/common"
-	commonconnection "github.com/antinvestor/common/connection"
+	"github.com/antinvestor/common/v2"
+	commonconnection "github.com/antinvestor/common/v2/connection"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"google.golang.org/protobuf/types/known/emptypb"

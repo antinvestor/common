@@ -18,8 +18,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/antinvestor/common"
-	"github.com/antinvestor/common/connection/options"
+	"github.com/antinvestor/common/v2"
+	"github.com/antinvestor/common/v2/connection/options"
 )
 
 // ResolvedHTTPService describes the endpoint and optional HTTP client for a service target.

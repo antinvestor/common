@@ -20,7 +20,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/antinvestor/common/connection/options"
+	"github.com/antinvestor/common/v2/connection/options"
 	"google.golang.org/grpc"
 
 	"golang.org/x/oauth2"
@@ -35,27 +35,27 @@ import (
 
 // DialSettings holds information needed to establish a connection.
 type DialSettings struct {
-	Endpoint                string
-	Scopes                  []string
-	DefaultScopes           []string
-	TokenSource             oauth2.TokenSource
-	UserAgent               string
-	TokenEndpoint           string
-	TokenEndpointAuthMethod string
-	APICredential           string
-	TokenUserName           string
-	TokenPassword           string
-	Audiences               []string
-	DefaultAudience         string
-	HTTPClient              *http.Client
-	HTTPEnableH2C           bool
-	HTTPDialOpts            []options.HTTPOption
-	GRPCDialOpts            []grpc.DialOption
-	GRPCConn                *grpc.ClientConn
-	ClientCertSource        func(*tls.CertificateRequestInfo) (*tls.Certificate, error)
-	NoAuth                  bool
-	CustomClaims            map[string]interface{}
-	PrivateKeyJWT           *PrivateKeyJWTConfig
+	Endpoint                 string
+	Scopes                   []string
+	DefaultScopes            []string
+	TokenSource              oauth2.TokenSource
+	UserAgent                string
+	TokenEndpoint            string
+	TokenEndpointAuthMethod  string
+	APICredential            string
+	TokenUserName            string
+	TokenPassword            string
+	RequestedAudiences       []string
+	DefaultRequestedAudience string
+	HTTPClient               *http.Client
+	HTTPEnableH2C            bool
+	HTTPDialOpts             []options.HTTPOption
+	GRPCDialOpts             []grpc.DialOption
+	GRPCConn                 *grpc.ClientConn
+	ClientCertSource         func(*tls.CertificateRequestInfo) (*tls.Certificate, error)
+	NoAuth                   bool
+	CustomClaims             map[string]interface{}
+	PrivateKeyJWT            *PrivateKeyJWTConfig
 
 	RequestReason string
 
@@ -73,15 +73,15 @@ func (ds *DialSettings) GetScopes() []string {
 	return ds.DefaultScopes
 }
 
-// GetAudiences returns user-provided audiences, if set, or else the default audience.
-func (ds *DialSettings) GetAudiences() []string {
-	if len(ds.Audiences) > 0 {
-		return ds.Audiences
+// GetRequestedAudiences returns explicitly requested resource recipients, or the configured default recipient.
+func (ds *DialSettings) GetRequestedAudiences() []string {
+	if len(ds.RequestedAudiences) > 0 {
+		return ds.RequestedAudiences
 	}
-	if strings.TrimSpace(ds.DefaultAudience) == "" {
+	if strings.TrimSpace(ds.DefaultRequestedAudience) == "" {
 		return nil
 	}
-	return []string{ds.DefaultAudience}
+	return []string{ds.DefaultRequestedAudience}
 }
 
 // Validate reports an error if ds is invalid.
@@ -117,17 +117,17 @@ func (ds *DialSettings) hasExplicitAuthentication() bool {
 }
 
 type PrivateKeyJWTConfig struct {
-	PrivateKeyPEM  []byte
-	PrivateKeyPath string
-	Source         string
-	SPIFFEID       string
-	Hint           string
-	KeyID          string
-	Audience       string
-	Issuer         string
-	Subject        string
-	SignerURL      string
-	SignerAPIKey   string
+	PrivateKeyPEM           []byte
+	PrivateKeyPath          string
+	Source                  string
+	SPIFFEID                string
+	Hint                    string
+	KeyID                   string
+	ClientAssertionAudience string
+	Issuer                  string
+	Subject                 string
+	SignerURL               string
+	SignerAPIKey            string
 }
 
 func (c *PrivateKeyJWTConfig) Clone() *PrivateKeyJWTConfig {
@@ -155,7 +155,7 @@ func (c *PrivateKeyJWTConfig) IsZero() bool {
 		strings.TrimSpace(c.SPIFFEID) == "" &&
 		strings.TrimSpace(c.Hint) == "" &&
 		strings.TrimSpace(c.KeyID) == "" &&
-		strings.TrimSpace(c.Audience) == "" &&
+		strings.TrimSpace(c.ClientAssertionAudience) == "" &&
 		strings.TrimSpace(c.Issuer) == "" &&
 		strings.TrimSpace(c.Subject) == "" &&
 		strings.TrimSpace(c.SignerURL) == ""

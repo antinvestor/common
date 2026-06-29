@@ -34,7 +34,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/antinvestor/common"
+	"github.com/antinvestor/common/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	"github.com/spiffe/go-spiffe/v2/workloadapi"
@@ -147,7 +147,7 @@ func NewOAuth2TokenSource(
 		return oauth2.ReuseTokenSource(nil, source), nil
 	case common.TokenEndpointAuthMethodClientSecretPost, common.TokenEndpointAuthMethodClientSecretBasic:
 		endpointValues := make(url.Values)
-		if audiences := ds.GetAudiences(); len(audiences) > 0 {
+		if audiences := ds.GetRequestedAudiences(); len(audiences) > 0 {
 			endpointValues.Add("audience", strings.Join(audiences, " "))
 		}
 
@@ -201,7 +201,7 @@ func NewPrivateKeyJWTTokenSource(
 		return nil, err
 	}
 
-	audience := strings.TrimSpace(ds.PrivateKeyJWT.Audience)
+	audience := strings.TrimSpace(ds.PrivateKeyJWT.ClientAssertionAudience)
 	if audience == "" {
 		audience = validatedTokenEndpoint
 	}
@@ -226,7 +226,7 @@ func NewPrivateKeyJWTTokenSource(
 		issuer:     issuer,
 		subject:    subject,
 		scopes:     append([]string(nil), ds.GetScopes()...),
-		audiences:  append([]string(nil), ds.GetAudiences()...),
+		audiences:  append([]string(nil), ds.GetRequestedAudiences()...),
 	}, nil
 }
 
@@ -583,7 +583,7 @@ func newRemoteSignerTokenSource(
 		return nil, errors.New("url private_key_jwt source requires signer_url")
 	}
 
-	audience := strings.TrimSpace(ds.PrivateKeyJWT.Audience)
+	audience := strings.TrimSpace(ds.PrivateKeyJWT.ClientAssertionAudience)
 	if audience == "" {
 		audience = tokenURL
 	}
@@ -601,7 +601,7 @@ func newRemoteSignerTokenSource(
 		keyID:        keyID,
 		audience:     audience,
 		scopes:       append([]string(nil), ds.GetScopes()...),
-		audiences:    append([]string(nil), ds.GetAudiences()...),
+		audiences:    append([]string(nil), ds.GetRequestedAudiences()...),
 	}, nil
 }
 

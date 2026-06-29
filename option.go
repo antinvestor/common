@@ -18,7 +18,7 @@ import (
 	"crypto/tls"
 	"net/http"
 
-	"github.com/antinvestor/common/connection/options"
+	"github.com/antinvestor/common/v2/connection/options"
 	"golang.org/x/oauth2"
 	"google.golang.org/grpc"
 )
@@ -187,17 +187,16 @@ func (w withTokenEndpointAuthMethod) Apply(o *DialSettings) {
 	o.TokenEndpointAuthMethod = string(w)
 }
 
-// WithAudiences returns a ClientOption that specifies an audience to be used
-// as the audience field ("aud") for the JWT token authentication.
-func WithAudiences(audience ...string) ClientOption {
-	return withAudiences(audience)
+// WithRequestedAudiences specifies the resource recipients requested from the OAuth2 token endpoint.
+func WithRequestedAudiences(audience ...string) ClientOption {
+	return withRequestedAudiences(audience)
 }
 
-type withAudiences []string
+type withRequestedAudiences []string
 
-func (w withAudiences) Apply(o *DialSettings) {
-	o.Audiences = make([]string, len(w))
-	copy(o.Audiences, w)
+func (w withRequestedAudiences) Apply(o *DialSettings) {
+	o.RequestedAudiences = make([]string, len(w))
+	copy(o.RequestedAudiences, w)
 }
 
 // WithoutAuthentication returns a ClientOption that specifies that no

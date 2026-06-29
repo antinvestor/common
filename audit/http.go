@@ -23,10 +23,10 @@ import (
 	"strings"
 	"time"
 
-	auditv1 "buf.build/gen/go/antinvestor/audit/protocolbuffers/go/audit/v1"
 	auditv1connect "buf.build/gen/go/antinvestor/audit/connectrpc/go/audit/v1/auditv1connect"
+	auditv1 "buf.build/gen/go/antinvestor/audit/protocolbuffers/go/audit/v1"
 	"connectrpc.com/connect"
-	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/v2/security"
 	"github.com/pitabwire/util"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -100,7 +100,6 @@ func HTTPMiddleware(
 		})
 	}
 }
-
 
 // statusWriter wraps http.ResponseWriter to capture the status code.
 type statusWriter struct {
@@ -308,4 +307,3 @@ func sendHTTPEntry(
 
 	_, _ = auditClient.CreateAuditEntry(sendCtx, connect.NewRequest(req))
 }
-

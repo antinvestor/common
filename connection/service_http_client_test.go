@@ -18,9 +18,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/antinvestor/common"
-	commonconnection "github.com/antinvestor/common/connection"
-	"github.com/antinvestor/common/connection/options"
+	"github.com/antinvestor/common/v2"
+	commonconnection "github.com/antinvestor/common/v2/connection"
+	"github.com/antinvestor/common/v2/connection/options"
 	"github.com/stretchr/testify/suite"
 )
 
