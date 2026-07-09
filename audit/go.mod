@@ -6,7 +6,7 @@ require (
 	buf.build/gen/go/antinvestor/audit/connectrpc/go v1.19.1-20260407152515-18e28354ce96.2
 	buf.build/gen/go/antinvestor/audit/protocolbuffers/go v1.36.11-20260407152515-18e28354ce96.1
 	connectrpc.com/connect v1.20.0
-	github.com/pitabwire/frame/v2 v2.0.1
+	github.com/pitabwire/frame/v2 v2.0.3
 	github.com/pitabwire/util v0.9.1
 	google.golang.org/protobuf v1.36.11
 )
