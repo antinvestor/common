@@ -32,6 +32,16 @@ jobs:
 
       - uses: bufbuild/buf-setup-action@v1
 
+      # Resolve remote deps before lint. Without this, modules that import
+      # buf/validate, common.v1, or gnostic fail with "cannot find … in this scope"
+      # even though deps are declared in buf.yaml — CI has no vendor/buf.lock cache.
+      - name: Resolve deps
+        env:
+          BUF_TOKEN: ${{ secrets.buf_token }}
+        run: |
+          cd ${{ inputs.proto_dir }}
+          buf dep update
+
       - name: Lint
         run: |
           cd ${{ inputs.proto_dir }}
@@ -43,5 +53,4 @@ jobs:
           BUF_TOKEN: ${{ secrets.buf_token }}
         run: |
           cd ${{ inputs.proto_dir }}
-          buf dep update
           buf push
