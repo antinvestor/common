@@ -32,6 +32,7 @@ import (
 )
 
 // HTTPMiddleware returns an http.Handler middleware that audits REST API calls.
+// Entries are buffered and flushed via BatchCreateAuditEntries when volume is high.
 //
 // It captures the same information as the Connect RPC Interceptor:
 // actor (from JWT claims), method, path, request body, response status,
@@ -56,6 +57,10 @@ func HTTPMiddleware(
 	var cfg Config = DefaultConfig{}
 	if len(cfgs) > 0 && cfgs[0] != nil {
 		cfg = cfgs[0]
+	}
+	var batcher *Batcher
+	if auditClient != nil {
+		batcher = NewBatcher(auditClient)
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -86,11 +91,12 @@ func HTTPMiddleware(
 
 			next.ServeHTTP(rw, r)
 
-			// Record the audit entry.
+			// Record the audit entry (batched when possible).
 			recordHTTPEntry(
 				r.Context(),
 				serviceName,
 				auditClient,
+				batcher,
 				r.Method,
 				r.URL.Path,
 				start,
@@ -154,6 +160,7 @@ func recordHTTPEntry(
 	ctx context.Context,
 	serviceName string,
 	auditClient auditv1connect.AuditServiceClient,
+	batcher *Batcher,
 	method, path string,
 	start time.Time,
 	reqBody string,
@@ -228,31 +235,25 @@ func recordHTTPEntry(
 		logger.Info(desc)
 	}
 
-	// Send to audit service.
+	// Queue for batch insert when profile is known.
 	if auditClient != nil && profileID != "" {
-		go sendHTTPEntry(ctx, auditClient, serviceName, profileID,
+		enqueueHTTPEntry(ctx, auditClient, batcher, serviceName, profileID,
 			action, resourceType, resourceID, deviceID,
 			targetProfileID, ipAddr, userAgent, entry,
 			method, path, reqBody, statusCode)
 	}
 }
 
-func sendHTTPEntry(
+func enqueueHTTPEntry(
 	ctx context.Context,
 	auditClient auditv1connect.AuditServiceClient,
+	batcher *Batcher,
 	serviceName, profileID, action, resourceType, resourceID,
 	deviceID, targetProfileID, ipAddr, userAgent string,
 	entry *Entry,
 	method, path, reqBody string,
 	statusCode int,
 ) {
-	sendCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	if claims := security.ClaimsFromContext(ctx); claims != nil {
-		sendCtx = claims.ClaimsToContext(sendCtx)
-	}
-
 	detailsMap := map[string]any{
 		"service":     serviceName,
 		"http_method": method,
@@ -305,5 +306,18 @@ func sendHTTPEntry(
 		TargetProfileId: targetProfileID,
 	}
 
-	_, _ = auditClient.CreateAuditEntry(sendCtx, connect.NewRequest(req))
+	carrier := claimsFromContext(ctx)
+	if batcher != nil {
+		batcher.Enqueue(carrier, req)
+		return
+	}
+
+	go func() {
+		sendCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if carrier != nil {
+			sendCtx = carrier.ClaimsToContext(sendCtx)
+		}
+		_, _ = auditClient.CreateAuditEntry(sendCtx, connect.NewRequest(req))
+	}()
 }

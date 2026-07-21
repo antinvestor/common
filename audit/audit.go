@@ -249,27 +249,40 @@ func (VerboseConfig) AuditShouldSkipHTTP(_ string) bool      { return false }
 type Interceptor struct {
 	serviceName string
 	auditClient auditv1connect.AuditServiceClient
+	batcher     *Batcher
 	config      Config
 }
 
 // NewInterceptor creates an audit interceptor with default config (no body capture).
+// Entries are buffered and flushed via BatchCreateAuditEntries for efficiency.
 //
 //   - serviceName: identifies the originating service (e.g. "service_profile")
 //   - auditClient: the audit service client. If nil, entries are only logged.
 func NewInterceptor(serviceName string, auditClient auditv1connect.AuditServiceClient) connect.Interceptor {
-	return &Interceptor{
-		serviceName: serviceName,
-		auditClient: auditClient,
-		config:      DefaultConfig{},
-	}
+	return NewInterceptorWithConfig(serviceName, auditClient, DefaultConfig{})
 }
 
 // NewInterceptorWithConfig creates an audit interceptor with explicit configuration.
+// When auditClient is non-nil, a Batcher is installed so high-volume RPCs share
+// multi-row BatchCreateAuditEntries calls instead of one RPC per mutation.
 func NewInterceptorWithConfig(serviceName string, auditClient auditv1connect.AuditServiceClient, cfg Config) connect.Interceptor {
+	var batcher *Batcher
+	if auditClient != nil {
+		batcher = NewBatcher(auditClient)
+	}
 	return &Interceptor{
 		serviceName: serviceName,
 		auditClient: auditClient,
+		batcher:     batcher,
 		config:      cfg,
+	}
+}
+
+// Flush drains any buffered audit entries. Call on process shutdown if you need
+// best-effort delivery of the last few hundred milliseconds of audits.
+func (a *Interceptor) Flush() {
+	if a != nil && a.batcher != nil {
+		a.batcher.Flush()
 	}
 }
 
@@ -430,14 +443,14 @@ func (a *Interceptor) record(
 		logger.Info(desc)
 	}
 
-	// Send to audit service asynchronously (best-effort).
-	if a.auditClient != nil && profileID != "" {
-		go a.send(ctx, profileID, action, resourceType, resourceID,
+	// Queue for batch insert (best-effort, async flush).
+	if profileID != "" && (a.batcher != nil || a.auditClient != nil) {
+		a.enqueue(ctx, profileID, action, resourceType, resourceID,
 			deviceID, targetProfileID, entry, requestBody, respBody, callErr)
 	}
 }
 
-func (a *Interceptor) send(
+func (a *Interceptor) enqueue(
 	ctx context.Context,
 	profileID, action, resourceType, resourceID,
 	deviceID, targetProfileID string,
@@ -445,13 +458,6 @@ func (a *Interceptor) send(
 	requestBody, responseBody string,
 	callErr error,
 ) {
-	sendCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	if claims := security.ClaimsFromContext(ctx); claims != nil {
-		sendCtx = claims.ClaimsToContext(sendCtx)
-	}
-
 	// Build details — everything goes into one Struct for the audit service.
 	detailsMap := map[string]any{
 		"service": a.serviceName,
@@ -520,7 +526,21 @@ func (a *Interceptor) send(
 		TargetProfileId: targetProfileID,
 	}
 
-	_, _ = a.auditClient.CreateAuditEntry(sendCtx, connect.NewRequest(req))
+	claims := claimsFromContext(ctx)
+	if a.batcher != nil {
+		a.batcher.Enqueue(claims, req)
+		return
+	}
+
+	// Fallback: single-entry fire-and-forget when batching is disabled.
+	go func() {
+		sendCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if claims != nil {
+			sendCtx = claims.ClaimsToContext(sendCtx)
+		}
+		_, _ = a.auditClient.CreateAuditEntry(sendCtx, connect.NewRequest(req))
+	}()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
