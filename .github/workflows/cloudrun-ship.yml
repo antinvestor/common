@@ -72,7 +72,7 @@ jobs:
           ALLOWED: ${{ inputs.allowed_services }}
         run: |
           set -euo pipefail
-          DEFAULT_ALLOWED="identity-profile,identity-authentication,identity-tenancy,identity-identity"
+          DEFAULT_ALLOWED="identity-profile,identity-authentication,identity-tenancy,identity-identity,platform-devices,platform-settings,platform-geolocation,platform-files"
           ALLOWED_LIST="${ALLOWED:-$DEFAULT_ALLOWED}"
           IFS=',' read -r -a ok <<< "$ALLOWED_LIST"
           match=false
