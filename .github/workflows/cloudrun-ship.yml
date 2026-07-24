@@ -1,0 +1,178 @@
+# Decentralized Cloud Run image ship.
+#
+# Call from a service repo after docker-release (or with an existing image tag).
+# OpenTofu owns infra (SA, secrets, Pub/Sub, env); this workflow only rolls the
+# container image and optionally re-runs the migrate job.
+#
+# Reliability order:
+#   1) update migrate job image (if configured)
+#   2) execute migrate and wait
+#   3) update Cloud Run service image (new revision)
+#
+# Auth: WIF → domain ship SA (e.g. cloudrun-ship@stawi-identity.iam.gserviceaccount.com).
+# No long-lived GCP keys. No central monorepo gate for version bumps.
+
+name: Cloud Run ship
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: Full image reference including tag or digest
+        required: true
+        type: string
+      service:
+        description: Cloud Run service name (must be allowlisted)
+        required: true
+        type: string
+      project_id:
+        required: true
+        type: string
+      region:
+        required: true
+        type: string
+      migrate_job:
+        description: Cloud Run Job name for migrations (empty = skip)
+        required: false
+        type: string
+        default: ""
+      workload_identity_provider:
+        description: Full WIF provider resource name
+        required: true
+        type: string
+      ship_service_account:
+        description: GCP SA email used to ship (narrow run.developer)
+        required: true
+        type: string
+      skip_migrate:
+        description: Skip migrate even if migrate_job is set
+        required: false
+        type: boolean
+        default: false
+      # Hard allowlist as a comma-separated string (defense in depth).
+      # Empty uses the built-in Frame identity defaults.
+      allowed_services:
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  ship:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Validate inputs
+        env:
+          SERVICE: ${{ inputs.service }}
+          IMAGE: ${{ inputs.image }}
+          ALLOWED: ${{ inputs.allowed_services }}
+        run: |
+          set -euo pipefail
+          DEFAULT_ALLOWED="identity-profile,identity-authentication,identity-tenancy,identity-identity"
+          ALLOWED_LIST="${ALLOWED:-$DEFAULT_ALLOWED}"
+          IFS=',' read -r -a ok <<< "$ALLOWED_LIST"
+          match=false
+          for s in "${ok[@]}"; do
+            s=$(echo "$s" | xargs)
+            if [[ "$s" == "$SERVICE" ]]; then
+              match=true
+              break
+            fi
+          done
+          if [[ "$match" != true ]]; then
+            echo "::error::Service '$SERVICE' is not in allowlist: $ALLOWED_LIST"
+            exit 1
+          fi
+          if [[ -z "$IMAGE" || "$IMAGE" == *":"* && "$IMAGE" == *":latest" ]]; then
+            echo "::warning::Shipping :latest is discouraged for prod; prefer semver tags"
+          fi
+          if [[ "$IMAGE" != *":"* && "$IMAGE" != *"@sha256:"* ]]; then
+            echo "::error::image must include a tag or digest: $IMAGE"
+            exit 1
+          fi
+          echo "Ship OK: service=$SERVICE image=$IMAGE"
+
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ inputs.workload_identity_provider }}
+          service_account: ${{ inputs.ship_service_account }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Update migrate job image
+        if: inputs.migrate_job != '' && inputs.skip_migrate == false
+        env:
+          PROJECT_ID: ${{ inputs.project_id }}
+          REGION: ${{ inputs.region }}
+          JOB: ${{ inputs.migrate_job }}
+          IMAGE: ${{ inputs.image }}
+        run: |
+          set -euo pipefail
+          if ! gcloud run jobs describe "$JOB" --project="$PROJECT_ID" --region="$REGION" >/dev/null 2>&1; then
+            echo "::warning::Migrate job $JOB not found — skipping job image update (infra may not be applied yet)"
+            exit 0
+          fi
+          gcloud run jobs update "$JOB" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --image="$IMAGE" \
+            --quiet
+          echo "Updated job $JOB → $IMAGE"
+
+      - name: Execute migrate job
+        if: inputs.migrate_job != '' && inputs.skip_migrate == false
+        env:
+          PROJECT_ID: ${{ inputs.project_id }}
+          REGION: ${{ inputs.region }}
+          JOB: ${{ inputs.migrate_job }}
+          SERVICE: ${{ inputs.service }}
+        run: |
+          set -euo pipefail
+          if ! gcloud run jobs describe "$JOB" --project="$PROJECT_ID" --region="$REGION" >/dev/null 2>&1; then
+            echo "::warning::Migrate job $JOB missing — continuing to service deploy"
+            exit 0
+          fi
+          echo "::group::Execute $JOB"
+          if gcloud run jobs execute "$JOB" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --wait; then
+            echo "Migrate $JOB succeeded"
+          else
+            # Frame apps: schema migrate is required for reliability; fail the ship.
+            echo "::error::Migrate job $JOB failed — refusing to ship service $SERVICE"
+            exit 1
+          fi
+          echo "::endgroup::"
+
+      - name: Deploy Cloud Run service image
+        env:
+          PROJECT_ID: ${{ inputs.project_id }}
+          REGION: ${{ inputs.region }}
+          SERVICE: ${{ inputs.service }}
+          IMAGE: ${{ inputs.image }}
+        run: |
+          set -euo pipefail
+          if ! gcloud run services describe "$SERVICE" --project="$PROJECT_ID" --region="$REGION" >/dev/null 2>&1; then
+            echo "::error::Cloud Run service $SERVICE not found in $PROJECT_ID/$REGION"
+            echo "Apply cloud.deployment first (creates service + env + Pub/Sub)."
+            exit 1
+          fi
+          gcloud run services update "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --image="$IMAGE" \
+            --quiet
+          URL=$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" --region="$REGION" \
+            --format='value(status.url)')
+          REV=$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" --region="$REGION" \
+            --format='value(status.latestReadyRevisionName)')
+          echo "::notice::Shipped $SERVICE → $IMAGE (revision=$REV url=$URL)"
