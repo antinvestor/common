@@ -18,19 +18,19 @@ import (
 	"context"
 	"crypto/x509"
 	"errors"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 
 	"github.com/antinvestor/common/v2"
 	"github.com/pitabwire/util"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"golang.org/x/oauth2"
-
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -179,16 +179,9 @@ func DialConnection(ctx context.Context, opts ...common.ClientOption) (*grpc.Cli
 
 	dialOptions := ds.GRPCDialOpts
 
-	var certDialOption grpc.DialOption
-	if !strings.HasSuffix(ds.Endpoint, ":443") {
-		certDialOption = grpc.WithTransportCredentials(insecure.NewCredentials())
-	} else {
-		pool, certErr := x509.SystemCertPool()
-		if certErr != nil {
-			return nil, certErr
-		}
-		creds := credentials.NewClientTLSFromCert(pool, "")
-		certDialOption = grpc.WithTransportCredentials(creds)
+	target, certDialOption, certErr := grpcTargetAndTransport(ds.Endpoint)
+	if certErr != nil {
+		return nil, certErr
 	}
 	dialOptions = append(dialOptions, certDialOption, grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 
@@ -211,7 +204,73 @@ func DialConnection(ctx context.Context, opts ...common.ClientOption) (*grpc.Cli
 	}
 
 	serviceConnection, err := grpc.NewClient(
-		ds.Endpoint, dialOptions...,
+		target, dialOptions...,
 	)
 	return serviceConnection, err
+}
+
+// grpcTargetAndTransport selects a grpc.NewClient target (host[:port], no URL
+// scheme) and transport credentials from the configured endpoint.
+//
+// Transport rules (aligned with Frame Keto authorizer / Cloud Run):
+//   - https://…          → TLS (system roots); target = host[:port]
+//   - http://…           → plaintext (cluster-internal / local)
+//   - host:443           → TLS
+//   - host:otherPort     → plaintext
+//   - bare host (no port)→ TLS on default 443 when the name looks like a
+//     public DNS name (contains a dot); otherwise plaintext (e.g. "keto")
+//
+// The old ":443 suffix only" check left https://*.run.app (no explicit port)
+// on insecure credentials, which fails TLS handshakes against Cloud Run.
+func grpcTargetAndTransport(endpoint string) (string, grpc.DialOption, error) {
+	endpoint = strings.TrimSpace(endpoint)
+	if endpoint == "" {
+		return "", nil, errors.New("grpc endpoint is required")
+	}
+
+	// URL form: https://host[:port]/path
+	if strings.Contains(endpoint, "://") {
+		u, err := url.Parse(endpoint)
+		if err != nil {
+			return "", nil, err
+		}
+		if u.Host == "" {
+			return "", nil, errors.New("grpc endpoint URL missing host")
+		}
+		switch strings.ToLower(u.Scheme) {
+		case "https":
+			opt, err := tlsDialOption()
+			return u.Host, opt, err
+		case "http":
+			return u.Host, grpc.WithTransportCredentials(insecure.NewCredentials()), nil
+		default:
+			// Unknown scheme: treat as host:port after the scheme.
+			return u.Host, grpc.WithTransportCredentials(insecure.NewCredentials()), nil
+		}
+	}
+
+	// Bare host:port or host
+	host, port, err := net.SplitHostPort(endpoint)
+	if err != nil {
+		// No port — public DNS names default to TLS:443; short names stay plaintext.
+		if strings.Contains(endpoint, ".") {
+			opt, tlsErr := tlsDialOption()
+			return endpoint, opt, tlsErr
+		}
+		return endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), nil
+	}
+	_ = host
+	if port == "443" {
+		opt, tlsErr := tlsDialOption()
+		return endpoint, opt, tlsErr
+	}
+	return endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), nil
+}
+
+func tlsDialOption() (grpc.DialOption, error) {
+	pool, err := x509.SystemCertPool()
+	if err != nil {
+		return nil, err
+	}
+	return grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(pool, "")), nil
 }
