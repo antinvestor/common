@@ -1,0 +1,122 @@
+name: Make GHCR packages public
+
+# One-shot / periodic: mark org container packages public so Cloud Run can pull
+# without Artifact Registry mirrors.
+#
+# Requires repository (or org) secret GHCR_ADMIN_TOKEN:
+#   classic PAT with scopes: write:packages, read:packages, repo (or delete:packages)
+# Token owner must be an org owner or package admin.
+#
+# Usage:
+#   gh workflow run make-ghcr-public.yml -R antinvestor/common
+#   gh workflow run make-ghcr-public.yml -R antinvestor/common -f packages=service-trustage,service-payment
+
+on:
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: Comma-separated package names (empty = all private containers)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publicize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve token
+        id: tok
+        env:
+          ADMIN: ${{ secrets.GHCR_ADMIN_TOKEN }}
+          FALLBACK: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ -n "${ADMIN}" ]]; then
+            echo "using=GHCR_ADMIN_TOKEN" >> "$GITHUB_OUTPUT"
+            echo "GH_TOKEN=${ADMIN}" >> "$GITHUB_ENV"
+          else
+            echo "using=GITHUB_TOKEN" >> "$GITHUB_OUTPUT"
+            echo "GH_TOKEN=${FALLBACK}" >> "$GITHUB_ENV"
+            echo "::warning::GHCR_ADMIN_TOKEN not set; GITHUB_TOKEN often cannot change package visibility."
+          fi
+
+      - name: List and publicize packages
+        env:
+          OWNER: ${{ github.repository_owner }}
+          INPUT_PACKAGES: ${{ inputs.packages }}
+        run: |
+          set -euo pipefail
+          make_public() {
+            local pkg="$1"
+            local enc
+            enc=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$pkg")
+            local vis
+            vis=$(gh api "orgs/${OWNER}/packages/container/${enc}" --jq .visibility 2>/dev/null || echo missing)
+            if [[ "$vis" == "missing" ]]; then
+              echo "SKIP missing: $pkg"
+              return 0
+            fi
+            if [[ "$vis" == "public" ]]; then
+              echo "OK already public: $pkg"
+              return 0
+            fi
+            echo "publicize $pkg (was $vis)..."
+            for attempt in \
+              "PUT orgs/${OWNER}/packages/container/${enc}/visibility" \
+              "POST orgs/${OWNER}/packages/container/${enc}/visibility" \
+              "PATCH orgs/${OWNER}/packages/container/${enc}"
+            do
+              method=${attempt%% *}
+              path=${attempt#* }
+              gh api --method "$method" "$path" -f visibility=public >/dev/null 2>&1 || true
+              vis=$(gh api "orgs/${OWNER}/packages/container/${enc}" --jq .visibility 2>/dev/null || echo missing)
+              if [[ "$vis" == "public" ]]; then
+                echo "OK public: $pkg"
+                return 0
+              fi
+            done
+            curl -sS -X PATCH \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github.package-deletes-preview+json" \
+              -H "Content-Type: application/json" \
+              "https://api.github.com/orgs/${OWNER}/packages/container/${enc}" \
+              -d '{"visibility":"public"}' >/dev/null || true
+            vis=$(gh api "orgs/${OWNER}/packages/container/${enc}" --jq .visibility 2>/dev/null || echo missing)
+            if [[ "$vis" == "public" ]]; then
+              echo "OK public: $pkg"
+              return 0
+            fi
+            echo "::error::FAILED $pkg still ${vis}. UI: https://github.com/orgs/${OWNER}/packages/container/package/${pkg}/settings"
+            return 1
+          }
+
+          failed=0
+          if [[ -n "${INPUT_PACKAGES}" ]]; then
+            IFS=',' read -r -a pkgs <<< "${INPUT_PACKAGES}"
+          else
+            mapfile -t pkgs < <(
+              gh api --paginate "orgs/${OWNER}/packages?package_type=container&per_page=100" \
+                --jq '.[] | select(.visibility=="private") | .name'
+            )
+            # API visibility filter is incomplete; always include known monorepo images.
+            for extra in service-authentication service-manufacturing service-payment \
+              service-profile-devices service-profile-settings service-trustage; do
+              pkgs+=("$extra")
+            done
+            # de-dupe
+            mapfile -t pkgs < <(printf '%s\n' "${pkgs[@]}" | sort -u)
+          fi
+
+          for pkg in "${pkgs[@]}"; do
+            pkg=$(echo "$pkg" | xargs)
+            [[ -z "$pkg" ]] && continue
+            make_public "$pkg" || failed=$((failed+1))
+          done
+
+          if [[ "$failed" -gt 0 ]]; then
+            echo "::error::${failed} package(s) still private"
+            exit 1
+          fi
+          echo "All requested packages are public."
