@@ -24,8 +24,6 @@ import (
 	"connectrpc.com/connect"
 	"github.com/antinvestor/common/v2"
 	commonconnection "github.com/antinvestor/common/v2/connection"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -208,28 +206,28 @@ func TestNewConnectClientCanOptIntoH2CForHTTPServices(t *testing.T) {
 	}))
 	defer tokenServer.Close()
 
-	serviceServer := httptest.NewUnstartedServer(
-		h2c.NewHandler(
-			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				serviceProto.Store(int32(r.ProtoMajor))
-				if r.URL.Path != procedure {
-					http.NotFound(w, r)
-					return
-				}
-				if got := r.Header.Get("Authorization"); got != "Bearer token-123" {
-					http.Error(w, "missing authorization", http.StatusUnauthorized)
-					return
-				}
-				connect.NewUnaryHandler(
-					procedure,
-					func(_ context.Context, _ *connect.Request[emptypb.Empty]) (*connect.Response[emptypb.Empty], error) {
-						return connect.NewResponse(&emptypb.Empty{}), nil
-					},
-				).ServeHTTP(w, r)
-			}),
-			&http2.Server{},
-		),
-	)
+	serviceServer := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serviceProto.Store(int32(r.ProtoMajor))
+		if r.URL.Path != procedure {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer token-123" {
+			http.Error(w, "missing authorization", http.StatusUnauthorized)
+			return
+		}
+		connect.NewUnaryHandler(
+			procedure,
+			func(_ context.Context, _ *connect.Request[emptypb.Empty]) (*connect.Response[emptypb.Empty], error) {
+				return connect.NewResponse(&emptypb.Empty{}), nil
+			},
+		).ServeHTTP(w, r)
+	}))
+	// Prefer stdlib unencrypted HTTP/2 instead of deprecated h2c.NewHandler.
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	protocols.SetUnencryptedHTTP2(true)
+	serviceServer.Config.Protocols = protocols
 	serviceServer.Start()
 	defer serviceServer.Close()
 
