@@ -27,7 +27,7 @@ opts, err := common.ClientOptions(ctx, cfg, common.ServiceTarget{
 })
 ```
 
-The configuration must expose `GetOauth2AudienceBaseURL() string`. For example, a production base of `https://api.stawi.org` makes the profile recipient `https://api.stawi.org/profile`. Other environments can use a different canonical HTTPS base without changing application code.
+The configuration must expose `GetOauth2AudienceBaseURL() string`. For example, a production base of `https://stawi.org` makes the profile recipient `https://profile.stawi.org`. Other environments can use a different canonical HTTPS base without changing application code.
 
 Callers cannot supply arbitrary recipients through `ServiceTarget`. Common derives them from the stable service ID and rejects unknown IDs. Low-level OAuth clients that do not use `ServiceTarget` can set explicit recipients with `WithRequestedAudiences`.
 
