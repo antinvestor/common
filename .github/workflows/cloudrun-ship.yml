@@ -29,8 +29,10 @@ on:
         required: true
         type: string
       region:
-        required: true
+        description: Cloud Run region (must be europe-west1 for Stawi prod)
+        required: false
         type: string
+        default: europe-west1
       migrate_job:
         description: Cloud Run Job name for migrations (empty = skip)
         required: false
@@ -95,6 +97,32 @@ jobs:
             exit 1
           fi
           echo "Ship OK: service=$SERVICE image=$IMAGE"
+
+      - name: Enforce GHCR image and europe-west1 region
+        env:
+          IMAGE: ${{ inputs.image }}
+          REGION: ${{ inputs.region }}
+        run: |
+          set -euo pipefail
+          REGION="${REGION:-europe-west1}"
+          if [[ "$REGION" == "europe-west9" || "$REGION" == "europe-west9"* ]]; then
+            echo "::error::region europe-west9 is retired. Use europe-west1 only (got: $REGION)"
+            exit 1
+          fi
+          if [[ "$REGION" != "europe-west1" ]]; then
+            echo "::error::Stawi Cloud Run ship only allows region=europe-west1 (got: $REGION)"
+            exit 1
+          fi
+          # Require public GHCR — no Artifact Registry / pkg.dev
+          if [[ "$IMAGE" == *".pkg.dev/"* || "$IMAGE" == *"gcr.io/"* ]]; then
+            echo "::error::Do not ship from Artifact Registry/GCR ($IMAGE). Use public ghcr.io/antinvestor/... images."
+            exit 1
+          fi
+          if [[ "$IMAGE" != ghcr.io/* ]]; then
+            echo "::error::image must be on ghcr.io (got: $IMAGE)"
+            exit 1
+          fi
+          echo "Registry/region OK: region=$REGION image=$IMAGE"
 
       - name: Authenticate to Google Cloud (WIF)
         uses: google-github-actions/auth@v2
