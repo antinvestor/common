@@ -15,6 +15,7 @@ const (
 	ServiceAudit                      ServiceID = "audit"
 	ServiceAuthentication             ServiceID = "authentication"
 	ServiceBilling                    ServiceID = "billing"
+	ServiceChatAgent                  ServiceID = "chat-agent"
 	ServiceChatDrone                  ServiceID = "chat-drone"
 	ServiceChatGateway                ServiceID = "chat-gateway"
 	ServiceCheckout                   ServiceID = "checkout"
@@ -67,6 +68,7 @@ var definitions = map[ServiceID]Definition{
 	ServiceAudit:                      {ID: ServiceAudit, AudiencePath: "/audit"},
 	ServiceAuthentication:             {ID: ServiceAuthentication, AudiencePath: "/authentication"},
 	ServiceBilling:                    {ID: ServiceBilling, AudiencePath: "/billing"},
+	ServiceChatAgent:                  {ID: ServiceChatAgent, AudiencePath: "/chat-agent"},
 	ServiceChatDrone:                  {ID: ServiceChatDrone, AudiencePath: "/chat-drone"},
 	ServiceChatGateway:                {ID: ServiceChatGateway, AudiencePath: "/chat-gateway"},
 	ServiceCheckout:                   {ID: ServiceCheckout, AudiencePath: "/checkout"},

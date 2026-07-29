@@ -61,6 +61,7 @@ func TestCatalogContainsCanonicalPlatformServices(t *testing.T) {
 		servicecatalog.ServiceAudit:                      "/audit",
 		servicecatalog.ServiceAuthentication:             "/authentication",
 		servicecatalog.ServiceBilling:                    "/billing",
+		servicecatalog.ServiceChatAgent:                  "/chat-agent",
 		servicecatalog.ServiceChatDrone:                  "/chat-drone",
 		servicecatalog.ServiceChatGateway:                "/chat-gateway",
 		servicecatalog.ServiceCheckout:                   "/checkout",
