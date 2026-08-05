@@ -18,6 +18,8 @@ jobs:
     uses: antinvestor/common/.github/workflows/dart-publish.yml@main
     secrets:
       pub_credentials: ${{ secrets.PUB_DEV_CREDENTIALS }}
+  # Merges opl/**/*.opl.ts into stawi-org/cloud.deployment
+  # apps/identity-authorization-keto/files/namespaces.ts (Cloud Run Keto).
   opl-push:
     permissions:
       contents: read
