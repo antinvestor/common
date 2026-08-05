@@ -1,0 +1,154 @@
+# Reusable workflow: merge service OPL fragments into the Cloud Run Keto
+# namespaces.ts in stawi-org/cloud.deployment.
+#
+# Source of truth for generation remains each service's opl/**/*.opl.ts
+# (via generate-opl). Production Keto loads a single namespaces.ts from GCS.
+#
+# Usage (in service release workflows, same as profile/files historically):
+#   jobs:
+#     opl-push:
+#       permissions:
+#         contents: read
+#       uses: antinvestor/common/.github/workflows/opl-push.yml@main
+#       secrets:
+#         deploy_token: ${{ secrets.DEPLOY_REPO_TOKEN }}
+#
+name: Push OPL to cloud.deployment
+
+on:
+  workflow_call:
+    inputs:
+      opl_source:
+        description: "Directory containing .opl.ts files (standard: opl/)"
+        required: false
+        default: "opl"
+        type: string
+      deploy_repo:
+        description: "Deployments repository that owns production namespaces.ts"
+        required: false
+        default: "stawi-org/cloud.deployment"
+        type: string
+      namespaces_path:
+        description: "Path to the combined Keto OPL file in the deploy repo"
+        required: false
+        default: "apps/identity-authorization-keto/files/namespaces.ts"
+        type: string
+    secrets:
+      deploy_token:
+        description: "GitHub token with push access to the deploy repo"
+        required: true
+
+jobs:
+  push-opl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout service repo
+        uses: actions/checkout@v6
+
+      - name: Find OPL files
+        id: find
+        run: |
+          set -euo pipefail
+          if [ ! -d "${{ inputs.opl_source }}" ]; then
+            echo "No ${{ inputs.opl_source }}/ directory"
+            echo "has_opl=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          mapfile -t FILES < <(find "${{ inputs.opl_source }}" -name '*.opl.ts' | sort)
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "No OPL files under ${{ inputs.opl_source }}"
+            echo "has_opl=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Found: ${FILES[*]}"
+          echo "has_opl=true" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout cloud.deployment
+        if: steps.find.outputs.has_opl == 'true'
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.deploy_repo }}
+          token: ${{ secrets.deploy_token }}
+          path: _deploy
+
+      - name: Merge OPL classes into namespaces.ts
+        if: steps.find.outputs.has_opl == 'true'
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib, re, sys
+
+          root = pathlib.Path("${{ inputs.opl_source }}")
+          target = pathlib.Path("_deploy") / "${{ inputs.namespaces_path }}"
+          if not target.is_file():
+              print(f"missing target {target}", file=sys.stderr)
+              sys.exit(1)
+
+          # Shared base classes stay owned by namespaces.ts; only merge
+          # functional/resource service classes from service repos.
+          skip = {"profile_user", "tenancy_access"}
+
+          class_re = re.compile(
+              r"(class\s+(\w+)\s+implements\s+Namespace\s*\{)",
+              re.M,
+          )
+
+          def extract_classes(text: str) -> dict[str, str]:
+              matches = list(class_re.finditer(text))
+              out = {}
+              for i, m in enumerate(matches):
+                  name = m.group(2)
+                  start = m.start()
+                  end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+                  body = text[start:end].rstrip() + "\n"
+                  out[name] = body
+              return out
+
+          ns_text = target.read_text()
+          ns_classes = extract_classes(ns_text)
+          merged = 0
+          for path in sorted(root.rglob("*.opl.ts")):
+              classes = extract_classes(path.read_text())
+              for name, body in classes.items():
+                  if name in skip:
+                      continue
+                  if name not in ns_classes:
+                      # Append new service class before end of file.
+                      ns_text = ns_text.rstrip() + "\n\n" + body.rstrip() + "\n"
+                      ns_classes[name] = body
+                      print(f"appended class {name} from {path}")
+                      merged += 1
+                      continue
+                  # Replace existing class block.
+                  old = ns_classes[name]
+                  # Re-extract from current ns_text each time (offsets change).
+                  current = extract_classes(ns_text)
+                  if name not in current:
+                      continue
+                  if current[name].strip() == body.strip():
+                      print(f"unchanged class {name}")
+                      continue
+                  ns_text = ns_text.replace(current[name], body if body.endswith("\n") else body + "\n", 1)
+                  print(f"replaced class {name} from {path}")
+                  merged += 1
+
+          target.write_text(ns_text if ns_text.endswith("\n") else ns_text + "\n")
+          print(f"merged_classes={merged}")
+          pathlib.Path("/tmp/opl_merged").write_text(str(merged))
+          PY
+
+      - name: Commit and push
+        if: steps.find.outputs.has_opl == 'true'
+        run: |
+          set -euo pipefail
+          cd _deploy
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${{ inputs.namespaces_path }}"
+          if git diff --cached --quiet; then
+            echo "No OPL changes to push"
+          else
+            git commit -m "chore(opl): merge ${{ github.repository }}@${{ github.sha }}"
+            git push
+            echo "OPL merged into ${{ inputs.deploy_repo }}"
+          fi
