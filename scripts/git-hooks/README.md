@@ -67,13 +67,20 @@ Each install copies hooks into `<repo>/.githooks/` and sets `git config core.hoo
 
 Re-run after updating templates in this directory (or after pulling common).
 
-## Escape hatches
+## Policy
+
+**Lint and test failures must be fixed before they leave the machine.**  
+Pre-commit and pre-push hard-fail on lint/test errors so GitHub CI stays green.
+
+## Escape hatches (emergency only)
 
 ```bash
-SKIP_HOOKS=1 git commit -m "wip"
-SKIP_HOOKS=1 git push
-git commit --no-verify
-PRECOMMIT_QUICK=1 git commit -m "..."   # lint only at commit; push still tests
+# Both env vars required — SKIP_HOOKS alone is refused
+ALLOW_SKIP_HOOKS=1 SKIP_HOOKS=1 git commit -m "emergency"
+ALLOW_SKIP_HOOKS=1 SKIP_HOOKS=1 git push
+
+git commit --no-verify   # git built-in; still blocked again by pre-push
+PRECOMMIT_QUICK=1 git commit -m "..."   # lint only at commit; pre-push always full tests
 ```
 
 ## Committing hooks into a service repo (optional)
