@@ -1,22 +1,28 @@
 #!/usr/bin/env bash
-# git-hooks/pre-push — full lint + tests before allowing a push to remote.
+# git-hooks/pre-push — full lint + full tests MUST pass before code leaves the machine.
 #
 # Source of truth: github.com/antinvestor/common (scripts/git-hooks/)
 # Install:  scripts/git-hooks/install-all.sh
 #
-# Catches --no-verify commits and ensures CI-equivalent checks before GitHub.
+# Policy: nothing broken reaches GitHub. Pre-push always runs full tests
+# (ignores PRECOMMIT_QUICK). Catches --no-verify commits.
 #
-# Escape hatches:
-#   SKIP_HOOKS=1 git push ...
-#   git push --no-verify
+# Emergency skip only (both required):
+#   ALLOW_SKIP_HOOKS=1 SKIP_HOOKS=1 git push ...
 #
-# Version: 2026-08-08.1
+# Version: 2026-08-08.2
 set -euo pipefail
 
 HOOK_NAME="pre-push"
 
 if [[ "${SKIP_HOOKS:-}" == "1" || "${SKIP_HOOKS:-}" == "true" ]]; then
-  echo "[$HOOK_NAME] SKIP_HOOKS set — skipping checks"
+  if [[ "${ALLOW_SKIP_HOOKS:-}" != "1" && "${ALLOW_SKIP_HOOKS:-}" != "true" ]]; then
+    echo "[$HOOK_NAME] REFUSED: SKIP_HOOKS without ALLOW_SKIP_HOOKS." >&2
+    echo "[$HOOK_NAME] Fix lint/tests locally before push. Emergency only:" >&2
+    echo "  ALLOW_SKIP_HOOKS=1 SKIP_HOOKS=1 git push ..." >&2
+    exit 1
+  fi
+  echo "[$HOOK_NAME] WARNING: emergency skip — you are responsible for CI"
   exit 0
 fi
 
@@ -45,42 +51,56 @@ run_make() {
   make "$target"
 }
 
-run_golangci_if_available() {
-  if ! command -v golangci-lint >/dev/null 2>&1; then
-    echo "[$HOOK_NAME] golangci-lint not installed — skip (CI still runs it)"
-    return 0
-  fi
+run_golangci() {
   [[ -f go.mod ]] || return 0
+  if ! command -v golangci-lint >/dev/null 2>&1; then
+    echo "[$HOOK_NAME] FAIL: golangci-lint required for Go repos (matches CI)." >&2
+    echo "  Install: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest" >&2
+    exit 1
+  fi
   echo "[$HOOK_NAME] golangci-lint run"
   golangci-lint run
 }
 
-run_gofmt_all_tracked() {
+# Format-check only Go files in this push (merge-base..HEAD), not historical drift.
+run_gofmt_push_range() {
   [[ -f go.mod ]] || return 0
-  if ! command -v gofmt >/dev/null 2>&1; then
-    return 0
+  command -v gofmt >/dev/null 2>&1 || return 0
+  local base files bad
+  base="$(git merge-base HEAD "@{upstream}" 2>/dev/null || true)"
+  if [[ -z "$base" ]]; then
+    base="$(git merge-base HEAD origin/main 2>/dev/null || true)"
   fi
-  local bad
-  # Tracked files only; still whole tree but git-managed (not vendor noise).
-  bad="$(gofmt -l $(git ls-files '*.go' 2>/dev/null) 2>/dev/null || true)"
+  if [[ -z "$base" ]]; then
+    files="$(git diff --name-only --diff-filter=ACM HEAD 2>/dev/null | grep '\.go$' || true)"
+  else
+    files="$(git diff --name-only --diff-filter=ACM "$base"...HEAD -- '*.go' 2>/dev/null || true)"
+  fi
+  [[ -z "$files" ]] && return 0
+  echo "[$HOOK_NAME] gofmt -l (Go files in push range)"
+  # shellcheck disable=SC2086
+  bad="$(echo "$files" | xargs -r gofmt -l 2>/dev/null || true)"
   if [[ -n "$bad" ]]; then
-    echo "[$HOOK_NAME] gofmt -l found unformatted tracked files:"
+    echo "[$HOOK_NAME] FAIL: unformatted Go files in this push:"
     echo "$bad"
-    echo "Fix: gofmt -w \$(gofmt -l \$(git ls-files '*.go'))"
-    # Do not hard-fail whole-tree gofmt on push — historical drift is common.
-    # golangci-lint + tests are the hard gates; warn only.
-    echo "[$HOOK_NAME] WARNING: gofmt drift present (not blocking push)"
+    echo "Fix: gofmt -w \$files && git add \$files && commit"
+    exit 1
   fi
 }
 
 run_node_in_dir() {
   local dir="$1"
   [[ -f "$dir/package.json" ]] || return 0
-  if ! command -v npm >/dev/null 2>&1; then
-    return 0
-  fi
+  command -v npm >/dev/null 2>&1 || {
+    echo "[$HOOK_NAME] FAIL: npm required for $dir" >&2
+    exit 1
+  }
   (
     cd "$dir"
+    if [[ ! -d node_modules ]] && [[ -f package-lock.json ]]; then
+      echo "[$HOOK_NAME] npm ci ($dir)"
+      npm ci --no-audit --no-fund
+    fi
     if grep -q '"lint"' package.json; then
       echo "[$HOOK_NAME] npm run lint ($dir)"
       npm run lint
@@ -89,26 +109,38 @@ run_node_in_dir() {
       echo "[$HOOK_NAME] npm run typecheck ($dir)"
       npm run typecheck
     fi
-    if [[ -f node_modules/.bin/prettier ]] || npx --no-install prettier --version >/dev/null 2>&1; then
+    if grep -q '"prettier"' package.json || [[ -f node_modules/.bin/prettier ]]; then
       echo "[$HOOK_NAME] prettier --check ($dir)"
       npx prettier --check "**/*.{ts,tsx,js,jsx,json,md,css}" 2>/dev/null \
         || npx prettier --check "**/*.{ts,tsx,js,json,md}"
+    fi
+    if grep -q '"test"' package.json; then
+      echo "[$HOOK_NAME] npm test ($dir)"
+      npm test
     fi
   )
 }
 
 run_nested_node_checks() {
   local dir
+  # Use if/then (not [[ ]] &&) so set -e does not abort when a path is missing.
   for dir in ui/app ui/admin ui; do
-    [[ -f "$dir/package.json" ]] && run_node_in_dir "$dir"
+    if [[ -f "$dir/package.json" ]]; then
+      run_node_in_dir "$dir"
+    fi
   done
-  # One level of apps/*/ui or packages/*
-  for dir in apps/*/ui packages/*; do
-    [[ -f "$dir/package.json" ]] && run_node_in_dir "$dir"
+  shopt -s nullglob
+  local extra=(apps/*/ui packages/*)
+  shopt -u nullglob
+  for dir in "${extra[@]}"; do
+    if [[ -f "$dir/package.json" ]]; then
+      run_node_in_dir "$dir"
+    fi
   done
 }
 
-echo "[$HOOK_NAME] Running full quality gates before push in $ROOT"
+echo "[$HOOK_NAME] Full quality gates before push in $ROOT"
+echo "[$HOOK_NAME] Lint + tests must pass here so GitHub CI stays green."
 
 ran_make_lint=0
 ran_make_format=0
@@ -127,13 +159,18 @@ if [[ -f Makefile ]]; then
     ran_make_lint=1
   fi
 
-  if [[ -f go.mod && "$ran_make_lint" -eq 0 ]]; then
-    run_gofmt_all_tracked
-    run_golangci_if_available
+  if [[ -f go.mod ]]; then
+    if [[ "$ran_make_format" -eq 0 ]]; then
+      run_gofmt_push_range
+    fi
+    if [[ "$ran_make_lint" -eq 0 ]]; then
+      run_golangci
+    fi
   fi
 
   run_nested_node_checks
 
+  # Always full tests on push (never honor PRECOMMIT_QUICK).
   if has_make_target test; then
     run_make test
   elif has_make_target tests; then
@@ -144,17 +181,17 @@ if [[ -f Makefile ]]; then
     echo "[$HOOK_NAME] go test ./..."
     go test ./...
   else
-    echo "[$HOOK_NAME] WARNING: no test target found"
+    echo "[$HOOK_NAME] WARNING: no test target — ensure this repo has tests"
   fi
 elif [[ -f go.mod ]]; then
   command -v go >/dev/null 2>&1 || { echo "go not found" >&2; exit 1; }
-  run_gofmt_all_tracked
-  run_golangci_if_available
+  run_gofmt_push_range
   echo "[$HOOK_NAME] go vet ./..."
   go vet ./...
+  run_golangci
+  run_nested_node_checks
   echo "[$HOOK_NAME] go test ./..."
   go test ./...
-  run_nested_node_checks
 elif [[ -f pubspec.yaml ]]; then
   if command -v dart >/dev/null 2>&1; then
     dart analyze
@@ -164,17 +201,14 @@ elif [[ -f pubspec.yaml ]]; then
   elif command -v dart >/dev/null 2>&1; then
     dart test
   fi
-elif [[ -f package.json ]] && command -v npm >/dev/null 2>&1; then
+elif [[ -f package.json ]]; then
   run_node_in_dir .
 else
   run_nested_node_checks
   if [[ -f go.mod ]]; then
     go test ./...
-  else
-    echo "[$HOOK_NAME] No known project type — skipping"
-    exit 0
   fi
 fi
 
-echo "[$HOOK_NAME] OK — ready to push"
+echo "[$HOOK_NAME] OK — ready to push (lint + tests green)"
 exit 0
