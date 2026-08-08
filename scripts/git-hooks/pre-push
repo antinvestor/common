@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+# git-hooks/pre-push — full lint + tests before allowing a push to remote.
+#
+# Source of truth: github.com/antinvestor/common (scripts/git-hooks/)
+# Install:  scripts/git-hooks/install-all.sh
+#
+# Catches --no-verify commits and ensures CI-equivalent checks before GitHub.
+#
+# Escape hatches:
+#   SKIP_HOOKS=1 git push ...
+#   git push --no-verify
+#
+# Version: 2026-08-08.1
+set -euo pipefail
+
+HOOK_NAME="pre-push"
+
+if [[ "${SKIP_HOOKS:-}" == "1" || "${SKIP_HOOKS:-}" == "true" ]]; then
+  echo "[$HOOK_NAME] SKIP_HOOKS set — skipping checks"
+  exit 0
+fi
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$ROOT"
+
+_MAKE_TARGETS_CACHE=""
+has_make_target() {
+  local target="$1"
+  [[ -f Makefile ]] || return 1
+  if [[ -z "$_MAKE_TARGETS_CACHE" ]]; then
+    _MAKE_TARGETS_CACHE="$(make -qp 2>/dev/null | awk -F':' '
+      /^# Not a target:|^$/ { next }
+      /^[^.#% ][^$#\/\t=]*:([^=]|$)/ {
+        split($1, a, " ")
+        print a[1]
+      }' | sort -u || true)"
+  fi
+  [[ -n "$_MAKE_TARGETS_CACHE" ]] || return 1
+  grep -Fxq "$target" <<< "$_MAKE_TARGETS_CACHE"
+}
+
+run_make() {
+  local target="$1"
+  echo "[$HOOK_NAME] make $target"
+  make "$target"
+}
+
+run_golangci_if_available() {
+  if ! command -v golangci-lint >/dev/null 2>&1; then
+    echo "[$HOOK_NAME] golangci-lint not installed — skip (CI still runs it)"
+    return 0
+  fi
+  [[ -f go.mod ]] || return 0
+  echo "[$HOOK_NAME] golangci-lint run"
+  golangci-lint run
+}
+
+run_gofmt_all_tracked() {
+  [[ -f go.mod ]] || return 0
+  if ! command -v gofmt >/dev/null 2>&1; then
+    return 0
+  fi
+  local bad
+  # Tracked files only; still whole tree but git-managed (not vendor noise).
+  bad="$(gofmt -l $(git ls-files '*.go' 2>/dev/null) 2>/dev/null || true)"
+  if [[ -n "$bad" ]]; then
+    echo "[$HOOK_NAME] gofmt -l found unformatted tracked files:"
+    echo "$bad"
+    echo "Fix: gofmt -w \$(gofmt -l \$(git ls-files '*.go'))"
+    # Do not hard-fail whole-tree gofmt on push — historical drift is common.
+    # golangci-lint + tests are the hard gates; warn only.
+    echo "[$HOOK_NAME] WARNING: gofmt drift present (not blocking push)"
+  fi
+}
+
+run_node_in_dir() {
+  local dir="$1"
+  [[ -f "$dir/package.json" ]] || return 0
+  if ! command -v npm >/dev/null 2>&1; then
+    return 0
+  fi
+  (
+    cd "$dir"
+    if grep -q '"lint"' package.json; then
+      echo "[$HOOK_NAME] npm run lint ($dir)"
+      npm run lint
+    fi
+    if grep -q '"typecheck"' package.json; then
+      echo "[$HOOK_NAME] npm run typecheck ($dir)"
+      npm run typecheck
+    fi
+    if [[ -f node_modules/.bin/prettier ]] || npx --no-install prettier --version >/dev/null 2>&1; then
+      echo "[$HOOK_NAME] prettier --check ($dir)"
+      npx prettier --check "**/*.{ts,tsx,js,jsx,json,md,css}" 2>/dev/null \
+        || npx prettier --check "**/*.{ts,tsx,js,json,md}"
+    fi
+  )
+}
+
+run_nested_node_checks() {
+  local dir
+  for dir in ui/app ui/admin ui; do
+    [[ -f "$dir/package.json" ]] && run_node_in_dir "$dir"
+  done
+  # One level of apps/*/ui or packages/*
+  for dir in apps/*/ui packages/*; do
+    [[ -f "$dir/package.json" ]] && run_node_in_dir "$dir"
+  done
+}
+
+echo "[$HOOK_NAME] Running full quality gates before push in $ROOT"
+
+ran_make_lint=0
+ran_make_format=0
+
+if [[ -f Makefile ]]; then
+  if has_make_target format; then
+    run_make format
+    ran_make_format=1
+    ran_make_lint=1
+  elif has_make_target fmt; then
+    run_make fmt
+    ran_make_format=1
+  fi
+  if [[ "$ran_make_format" -eq 0 ]] && has_make_target lint; then
+    run_make lint
+    ran_make_lint=1
+  fi
+
+  if [[ -f go.mod && "$ran_make_lint" -eq 0 ]]; then
+    run_gofmt_all_tracked
+    run_golangci_if_available
+  fi
+
+  run_nested_node_checks
+
+  if has_make_target test; then
+    run_make test
+  elif has_make_target tests; then
+    run_make tests
+  elif has_make_target check; then
+    run_make check
+  elif [[ -f go.mod ]]; then
+    echo "[$HOOK_NAME] go test ./..."
+    go test ./...
+  else
+    echo "[$HOOK_NAME] WARNING: no test target found"
+  fi
+elif [[ -f go.mod ]]; then
+  command -v go >/dev/null 2>&1 || { echo "go not found" >&2; exit 1; }
+  run_gofmt_all_tracked
+  run_golangci_if_available
+  echo "[$HOOK_NAME] go vet ./..."
+  go vet ./...
+  echo "[$HOOK_NAME] go test ./..."
+  go test ./...
+  run_nested_node_checks
+elif [[ -f pubspec.yaml ]]; then
+  if command -v dart >/dev/null 2>&1; then
+    dart analyze
+  fi
+  if command -v flutter >/dev/null 2>&1 && grep -q 'flutter:' pubspec.yaml 2>/dev/null; then
+    flutter test
+  elif command -v dart >/dev/null 2>&1; then
+    dart test
+  fi
+elif [[ -f package.json ]] && command -v npm >/dev/null 2>&1; then
+  run_node_in_dir .
+else
+  run_nested_node_checks
+  if [[ -f go.mod ]]; then
+    go test ./...
+  else
+    echo "[$HOOK_NAME] No known project type — skipping"
+    exit 0
+  fi
+fi
+
+echo "[$HOOK_NAME] OK — ready to push"
+exit 0
