@@ -21,4 +21,9 @@ jobs:
       - uses: gotesttools/gotestfmt-action@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+      # Download modules before testing: `go test -json 2>&1` otherwise mixes
+      # `go: downloading ...` stderr text into the JSON stream mid-run, which
+      # crashes gotestfmt v2.5.0 with "panic: BUG: Empty package name" on any
+      # module-cache miss (e.g. a branch that changes go.sum).
+      - run: go mod download
       - run: go test -p 1 -json -v ./... 2>&1 | gotestfmt -hide all
