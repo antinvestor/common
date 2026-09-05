@@ -6,7 +6,7 @@ the notification protos and frame.
 
 | Need | Use |
 |------|-----|
-| Declare a message once, in code | `Template{Name, Subject, Bodies, Variables}` |
+| Declare a message once, in code | `New(name, subject, short, long, vars...)` — short is the SMS body, long the email body |
 | Collect a service's templates | `NewRegistry(owner)` + `MustAdd` in package init |
 | Register them from the setup Job on every deploy | `RegisterTemplateSync(svc, &cfg, Target{...}, registry)` |
 | Build the authenticated client | `NewClient(ctx, &cfg, Target{...})` |

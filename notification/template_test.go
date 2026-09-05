@@ -40,12 +40,18 @@ func (f *fakeSaver) TemplateSave(_ context.Context, req *connect.Request[notific
 }
 
 func shipped() notification.Template {
-	return notification.Template{
-		Name:      "template.demo.order.shipped",
-		Subject:   "Order {{.reference}} shipped",
-		Bodies:    map[string]string{notification.ChannelSMS: "Order {{.reference}} shipped.", notification.ChannelEmail: "<p>Order {{.reference}} shipped.</p>"},
-		Variables: []string{"reference"},
-	}
+	return notification.New("template.demo.order.shipped", "Order {{.reference}} shipped",
+		"Order {{.reference}} shipped.", "<p>Order {{.reference}} shipped.</p>", "reference")
+}
+
+func TestNewSavesShortAsSMSAndLongAsEmail(t *testing.T) {
+	tpl := shipped()
+	require.Equal(t, "Order {{.reference}} shipped.", tpl.Short())
+	require.Equal(t, "<p>Order {{.reference}} shipped.</p>", tpl.Long())
+	require.Equal(t, tpl.Short(), tpl.Bodies[notification.ChannelSMS])
+	require.Equal(t, tpl.Long(), tpl.Bodies[notification.ChannelEmail])
+	require.Equal(t, notification.DefaultLanguage, tpl.Language)
+	require.NoError(t, tpl.Validate())
 }
 
 func TestSyncSendsSubjectChannelsAndExtra(t *testing.T) {

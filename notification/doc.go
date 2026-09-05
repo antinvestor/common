@@ -40,15 +40,10 @@
 //	const OrderShipped = "template.orders.order.shipped"
 //
 //	func init() {
-//	    Registry.MustAdd(notification.Template{
-//	        Name:    OrderShipped,
-//	        Subject: "Order {{.reference}} shipped",
-//	        Bodies: map[string]string{
-//	            notification.ChannelSMS:   "Order {{.reference}} shipped.",
-//	            notification.ChannelEmail: "<p>Order {{.reference}} shipped.</p>",
-//	        },
-//	        Variables: []string{"reference"},
-//	    })
+//	    Registry.MustAdd(notification.New(OrderShipped, "Order {{.reference}} shipped",
+//	        "Order {{.reference}} shipped.",          // short → SMS
+//	        "<p>Order {{.reference}} shipped.</p>",   // long  → email
+//	        "reference"))
 //	}
 //
 // # Wiring the setup job

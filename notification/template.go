@@ -64,6 +64,25 @@ type Template struct {
 	Extra map[string]any
 }
 
+// New builds a template from a short and a long version of the message: the
+// short one is saved as the SMS body, the long one as the email body. This is
+// the shape every consumer should declare messages in.
+func New(name, subject, short, long string, variables ...string) Template {
+	return Template{
+		Name:      name,
+		Language:  DefaultLanguage,
+		Subject:   subject,
+		Bodies:    map[string]string{ChannelSMS: short, ChannelEmail: long},
+		Variables: variables,
+	}
+}
+
+// Short returns the SMS body.
+func (t Template) Short() string { return t.Bodies[ChannelSMS] }
+
+// Long returns the email body.
+func (t Template) Long() string { return t.Bodies[ChannelEmail] }
+
 // Saver is the slice of the notification client Sync needs.
 type Saver interface {
 	TemplateSave(ctx context.Context, req *connect.Request[notificationv1.TemplateSaveRequest]) (*connect.Response[notificationv1.TemplateSaveResponse], error)
