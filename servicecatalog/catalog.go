@@ -34,6 +34,7 @@ const (
 	ServiceNotification               ServiceID = "notification"
 	ServiceNotificationAfricasTalking ServiceID = "notification-africastalking"
 	ServiceNotificationEmailSMTP      ServiceID = "notification-emailsmtp"
+	ServiceNotificationWhatsApp       ServiceID = "notification-whatsapp"
 	ServiceOperations                 ServiceID = "operations"
 	ServiceOpportunitiesCrawler       ServiceID = "opportunities-crawler"
 	ServiceOpportunitiesMaterializer  ServiceID = "opportunities-materializer"
@@ -87,6 +88,7 @@ var definitions = map[ServiceID]Definition{
 	ServiceNotification:               {ID: ServiceNotification, AudiencePath: "/notification"},
 	ServiceNotificationAfricasTalking: {ID: ServiceNotificationAfricasTalking, AudiencePath: "/notification-africastalking"},
 	ServiceNotificationEmailSMTP:      {ID: ServiceNotificationEmailSMTP, AudiencePath: "/notification-emailsmtp"},
+	ServiceNotificationWhatsApp:       {ID: ServiceNotificationWhatsApp, AudiencePath: "/notification-whatsapp"},
 	ServiceOperations:                 {ID: ServiceOperations, AudiencePath: "/operations"},
 	ServiceOpportunitiesCrawler:       {ID: ServiceOpportunitiesCrawler, AudiencePath: "/opportunities-crawler"},
 	ServiceOpportunitiesMaterializer:  {ID: ServiceOpportunitiesMaterializer, AudiencePath: "/opportunities-materializer"},
