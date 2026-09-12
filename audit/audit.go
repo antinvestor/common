@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package audit provides a reusable Connect RPC interceptor for audit logging.
+// Package audit provides a reusable Connect RPC interceptor and HTTP
+// middleware that record human actions in the audit service.
 //
-// The interceptor captures all non-idempotent RPC calls and sends structured
-// audit entries to the audit service. Handlers enrich the audit context with
-// resource-specific metadata using the With* functions.
+// The interceptor captures non-idempotent RPCs whose caller is a person and
+// sends one entry per call, synchronously, on a client with a short
+// construction-time timeout. Failures are logged and counted, never
+// propagated: audit availability must not block the producer.
 //
 // # Basic usage
 //
@@ -24,31 +26,25 @@
 //
 // # Handler enrichment
 //
-//	// Identify the resource being acted on.
 //	ctx = audit.WithResource(ctx, "organization", org.GetId())
-//
-//	// Record a state transition.
 //	ctx = audit.WithStateChange(ctx, "CREATED", "ACTIVE")
-//
-//	// Record a relationship change (e.g. contact added to profile).
-//	ctx = audit.WithRelation(ctx, audit.Relation{
-//	    ParentType: "profile",
-//	    ParentID:   profileID,
-//	    ChildType:  "contact",
-//	    ChildID:    contactID,
-//	    Action:     "added",
-//	})
-//
-//	// Add arbitrary key-value details.
+//	ctx = audit.WithRelation(ctx, audit.Relation{ParentType: "profile", ParentID: profileID,
+//	    ChildType: "contact", ChildID: contactID, Action: audit.RelationAdded})
 //	ctx = audit.WithDetail(ctx, "reason", "customer request")
-//	ctx = audit.WithDetail(ctx, "approved_by", approverID)
+//	ctx = audit.WithIntent(ctx, intentID, payloadHash, authorizationHash, policyHash)
+//
+// # Operators acting for a person
+//
+// A service-account caller produces no entry unless the handler names the
+// person it acts for:
+//
+//	ctx = audit.WithOnBehalfOf(ctx, memberProfileID)
 package audit
 
 import (
 	"context"
 	"fmt"
 	"net/http"
-	"reflect"
 	"strings"
 	"time"
 
@@ -57,9 +53,12 @@ import (
 	"connectrpc.com/connect"
 	"github.com/pitabwire/frame/v2/security"
 	"github.com/pitabwire/util"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -73,6 +72,8 @@ type Entry struct {
 	// Resource being acted on.
 	ResourceType string
 	ResourceID   string
+	// ResourceVersion after the action (0 when unknown).
+	ResourceVersion int64
 
 	// Override the auto-detected action (e.g. "approve" instead of "Save").
 	Action string
@@ -80,12 +81,28 @@ type Entry struct {
 	// Profile ID of the target user, if the action affects another user.
 	TargetProfileID string
 
+	// OnBehalfOf names the person a service-account caller acts for.
+	OnBehalfOf string
+
 	// State transition (e.g. CREATED → ACTIVE).
 	StateFrom string
 	StateTo   string
 
 	// Relationships created or modified during this action.
 	Relations []Relation
+
+	// Evidence join keys.
+	EntryID           string
+	CorrelationID     string
+	EventID           string
+	IntentID          string
+	InstanceID        string
+	PayloadHash       string
+	AuthorizationHash string
+	PolicyHash        string
+	DeviceKeyID       string
+	// OccurredAt overrides receipt time (outbox replays).
+	OccurredAt time.Time
 
 	// Arbitrary key-value details.
 	Details map[string]any
@@ -102,7 +119,7 @@ type Relation struct {
 	ParentID   string // e.g. "d75qclkpf2t1uum8ij3g"
 	ChildType  string // e.g. "contact"
 	ChildID    string // e.g. "d7eloa0jbutr739k3qmg"
-	Action     string // e.g. "added", "removed", "updated"
+	Action     string // RelationAdded, RelationRemoved, RelationModified
 }
 
 func entryFromContext(ctx context.Context) *Entry {
@@ -129,10 +146,6 @@ func initEntry(ctx context.Context) context.Context {
 }
 
 // WithResource identifies the primary resource being acted on.
-// If an entry was pre-populated by the interceptor, the existing pointer
-// is mutated (no new context allocation). Otherwise a new entry is created.
-//
-//	audit.WithResource(ctx, "organization", org.GetId())
 func WithResource(ctx context.Context, resourceType, resourceID string) context.Context {
 	ctx, e := ensureEntry(ctx)
 	e.ResourceType = resourceType
@@ -140,9 +153,14 @@ func WithResource(ctx context.Context, resourceType, resourceID string) context.
 	return ctx
 }
 
+// WithResourceVersion records the resource version after the action.
+func WithResourceVersion(ctx context.Context, version int64) context.Context {
+	ctx, e := ensureEntry(ctx)
+	e.ResourceVersion = version
+	return ctx
+}
+
 // WithAction overrides the auto-detected action name.
-//
-//	audit.WithAction(ctx, "approve")
 func WithAction(ctx context.Context, action string) context.Context {
 	ctx, e := ensureEntry(ctx)
 	e.Action = action
@@ -150,17 +168,21 @@ func WithAction(ctx context.Context, action string) context.Context {
 }
 
 // WithTarget sets the target profile affected by this action.
-//
-//	audit.WithTarget(ctx, memberProfileID)
 func WithTarget(ctx context.Context, targetProfileID string) context.Context {
 	ctx, e := ensureEntry(ctx)
 	e.TargetProfileID = targetProfileID
 	return ctx
 }
 
+// WithOnBehalfOf names the person a service-account caller acts for. It is
+// the only way a machine caller produces an audit entry.
+func WithOnBehalfOf(ctx context.Context, profileID string) context.Context {
+	ctx, e := ensureEntry(ctx)
+	e.OnBehalfOf = profileID
+	return ctx
+}
+
 // WithStateChange records a state transition on the resource.
-//
-//	audit.WithStateChange(ctx, "CREATED", "ACTIVE")
 func WithStateChange(ctx context.Context, fromState, toState string) context.Context {
 	ctx, e := ensureEntry(ctx)
 	e.StateFrom = fromState
@@ -169,23 +191,15 @@ func WithStateChange(ctx context.Context, fromState, toState string) context.Con
 }
 
 // WithRelation records a relationship created, modified, or removed.
-// Call multiple times for multiple relationships in a single action.
-//
-//	audit.WithRelation(ctx, audit.Relation{
-//	    ParentType: "profile", ParentID: profileID,
-//	    ChildType: "contact", ChildID: contactID,
-//	    Action: "added",
-//	})
 func WithRelation(ctx context.Context, rel Relation) context.Context {
 	ctx, e := ensureEntry(ctx)
 	e.Relations = append(e.Relations, rel)
 	return ctx
 }
 
-// WithDetail adds a single key-value detail. Safe to call multiple times.
-//
-//	audit.WithDetail(ctx, "reason", "compliance review")
-//	audit.WithDetail(ctx, "old_name", oldName)
+// WithDetail adds a single key-value detail. Keys that look like secrets
+// (password, token, otp, …) and values that look like phone or card
+// numbers are rejected by the audit service; send hashes instead.
 func WithDetail(ctx context.Context, key string, value any) context.Context {
 	ctx, e := ensureEntry(ctx)
 	if e.Details == nil {
@@ -195,23 +209,65 @@ func WithDetail(ctx context.Context, key string, value any) context.Context {
 	return ctx
 }
 
+// WithEntryID sets the idempotency key (outbox replays reuse it).
+func WithEntryID(ctx context.Context, entryID string) context.Context {
+	ctx, e := ensureEntry(ctx)
+	e.EntryID = entryID
+	return ctx
+}
+
+// WithCorrelation sets the cross-service correlation id.
+func WithCorrelation(ctx context.Context, correlationID string) context.Context {
+	ctx, e := ensureEntry(ctx)
+	e.CorrelationID = correlationID
+	return ctx
+}
+
+// WithEvent links the entry to a domain event.
+func WithEvent(ctx context.Context, eventID string) context.Context {
+	ctx, e := ensureEntry(ctx)
+	e.EventID = eventID
+	return ctx
+}
+
+// WithInstance links the entry to a workflow instance.
+func WithInstance(ctx context.Context, instanceID string) context.Context {
+	ctx, e := ensureEntry(ctx)
+	e.InstanceID = instanceID
+	return ctx
+}
+
+// WithIntent links the entry to a financial intent and its evidence hashes
+// (32-byte lowercase hex, or empty).
+func WithIntent(ctx context.Context, intentID, payloadHash, authorizationHash, policyHash string) context.Context {
+	ctx, e := ensureEntry(ctx)
+	e.IntentID = intentID
+	e.PayloadHash = payloadHash
+	e.AuthorizationHash = authorizationHash
+	e.PolicyHash = policyHash
+	return ctx
+}
+
+// WithDeviceKey records the device key that signed the request.
+func WithDeviceKey(ctx context.Context, deviceKeyID string) context.Context {
+	ctx, e := ensureEntry(ctx)
+	e.DeviceKeyID = deviceKeyID
+	return ctx
+}
+
+// WithOccurredAt overrides the action time (outbox replays).
+func WithOccurredAt(ctx context.Context, at time.Time) context.Context {
+	ctx, e := ensureEntry(ctx)
+	e.OccurredAt = at
+	return ctx
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Interceptor
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Config controls audit interceptor behavior. Implement this interface
-// to provide custom configuration (e.g. from environment variables,
-// feature flags, or per-request logic).
+// Config controls which calls are audited.
 type Config interface {
-	// AuditCaptureRequestBody returns true if request payloads should be
-	// serialized into the audit entry. Disabled by default to avoid
-	// performance overhead and accidental PII exposure.
-	AuditCaptureRequestBody() bool
-
-	// AuditCaptureResponseBody returns true if response payloads should be
-	// serialized into the audit entry.
-	AuditCaptureResponseBody() bool
-
 	// AuditShouldSkipRPC returns true if the given Connect RPC should NOT
 	// be audited. The default skips idempotent RPCs (Get, Search, List).
 	AuditShouldSkipRPC(spec connect.Spec) bool
@@ -221,11 +277,8 @@ type Config interface {
 	AuditShouldSkipHTTP(method string) bool
 }
 
-// DefaultConfig audits only mutating operations, no body capture.
+// DefaultConfig audits only mutating operations.
 type DefaultConfig struct{}
-
-func (DefaultConfig) AuditCaptureRequestBody() bool  { return false }
-func (DefaultConfig) AuditCaptureResponseBody() bool { return false }
 
 func (DefaultConfig) AuditShouldSkipRPC(spec connect.Spec) bool {
 	return spec.IdempotencyLevel == connect.IdempotencyIdempotent ||
@@ -233,73 +286,64 @@ func (DefaultConfig) AuditShouldSkipRPC(spec connect.Spec) bool {
 }
 
 func (DefaultConfig) AuditShouldSkipHTTP(method string) bool {
-	return method == "GET" || method == "HEAD" || method == "OPTIONS"
+	return method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions
 }
 
-// VerboseConfig audits everything with body capture enabled.
-type VerboseConfig struct{}
-
-func (VerboseConfig) AuditCaptureRequestBody() bool          { return true }
-func (VerboseConfig) AuditCaptureResponseBody() bool         { return true }
-func (VerboseConfig) AuditShouldSkipRPC(_ connect.Spec) bool { return false }
-func (VerboseConfig) AuditShouldSkipHTTP(_ string) bool      { return false }
+const meterName = "antinvestor.audit"
 
 // Interceptor is a Connect RPC interceptor that captures audit entries
-// for non-idempotent RPCs and sends them to the audit service.
+// for non-idempotent RPCs whose caller is a person.
 type Interceptor struct {
 	serviceName string
 	auditClient auditv1connect.AuditServiceClient
 	config      Config
+	sender      *sender
 }
 
-// NewInterceptor creates an audit interceptor with default config (no body capture).
+// NewInterceptor creates an audit interceptor with default config.
 //
-//   - serviceName: identifies the originating service (e.g. "service_profile")
-//   - auditClient: the audit service client. If nil, entries are only logged.
+//   - serviceName: identifies the originating service (e.g. "service_profile").
+//     It must equal the service_name claim of the producer's service account;
+//     the audit service rejects entries logged under any other name.
+//   - auditClient: the audit service client, built with ClientOptions so its
+//     timeout is short. If nil, entries are only logged.
 func NewInterceptor(serviceName string, auditClient auditv1connect.AuditServiceClient) connect.Interceptor {
-	return &Interceptor{
-		serviceName: serviceName,
-		auditClient: auditClient,
-		config:      DefaultConfig{},
-	}
+	return NewInterceptorWithConfig(serviceName, auditClient, DefaultConfig{})
 }
 
 // NewInterceptorWithConfig creates an audit interceptor with explicit configuration.
 func NewInterceptorWithConfig(serviceName string, auditClient auditv1connect.AuditServiceClient, cfg Config) connect.Interceptor {
+	if cfg == nil {
+		cfg = DefaultConfig{}
+	}
 	return &Interceptor{
 		serviceName: serviceName,
 		auditClient: auditClient,
 		config:      cfg,
+		sender:      newSender(serviceName, auditClient),
 	}
 }
 
 func (a *Interceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		if shouldSkipInternal(ctx) || a.config.AuditShouldSkipRPC(req.Spec()) {
+		if a.config.AuditShouldSkipRPC(req.Spec()) {
 			return next(ctx, req)
 		}
-
+		actorCtx := ctx
 		start := time.Now()
-		procedure := req.Spec().Procedure
-
-		// Pre-populate an empty entry so handlers can enrich it via
-		// the With* functions. The entry is a pointer — mutations in
-		// the handler are visible to the interceptor after return.
 		ctx = initEntry(ctx)
 		if e := entryFromContext(ctx); e != nil {
 			e.IPAddress = extractIPAddress(req.Header())
 			e.UserAgent = req.Header().Get("User-Agent")
 		}
 
-		var reqSnapshot string
-		if a.config.AuditCaptureRequestBody() {
-			reqSnapshot = marshalProto(req.Any())
-		}
-
 		resp, err := next(ctx, req)
 
-		a.record(ctx, procedure, start, reqSnapshot, resp, err)
-
+		// The actor is resolved after the handler ran so WithOnBehalfOf is
+		// visible; claims come from the original context.
+		if actor, ok := ResolveActor(ctx); ok {
+			a.sender.record(actorCtx, ctx, actor, req.Spec().Procedure, start, err)
+		}
 		return resp, err
 	}
 }
@@ -310,118 +354,81 @@ func (a *Interceptor) WrapStreamingClient(next connect.StreamingClientFunc) conn
 
 func (a *Interceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		if shouldSkipInternal(ctx) || a.config.AuditShouldSkipRPC(conn.Spec()) {
+		if a.config.AuditShouldSkipRPC(conn.Spec()) {
 			return next(ctx, conn)
 		}
-
+		actorCtx := ctx
 		start := time.Now()
 		ctx = initEntry(ctx)
+		if e := entryFromContext(ctx); e != nil {
+			e.IPAddress = extractIPAddress(conn.RequestHeader())
+			e.UserAgent = conn.RequestHeader().Get("User-Agent")
+		}
 		err := next(ctx, conn)
-
-		a.record(ctx, conn.Spec().Procedure, start, "", nil, err)
-
+		if actor, ok := ResolveActor(ctx); ok {
+			a.sender.record(actorCtx, ctx, actor, conn.Spec().Procedure, start, err)
+		}
 		return err
 	}
 }
 
-func shouldSkipInternal(ctx context.Context) bool {
-	claims := security.ClaimsFromContext(ctx)
-	return claims != nil && claims.IsInternalSystem()
+// ─────────────────────────────────────────────────────────────────────────────
+// Sending
+// ─────────────────────────────────────────────────────────────────────────────
+
+// sender logs and sends entries. It is shared by the interceptor and the
+// HTTP middleware.
+type sender struct {
+	serviceName string
+	client      auditv1connect.AuditServiceClient
+	failures    metric.Int64Counter
+	sent        metric.Int64Counter
+	tracer      trace.Tracer
 }
 
-func (a *Interceptor) record(
-	ctx context.Context,
-	procedure string,
-	start time.Time,
-	requestBody string,
-	resp connect.AnyResponse,
-	callErr error,
-) {
-	claims := security.ClaimsFromContext(ctx)
-	entry := entryFromContext(ctx)
+func newSender(serviceName string, client auditv1connect.AuditServiceClient) *sender {
+	meter := otel.Meter(meterName)
+	failures, _ := meter.Int64Counter("audit_entry_send_failures_total",
+		metric.WithDescription("Audit entries the producer could not deliver"))
+	sent, _ := meter.Int64Counter("audit_entry_sent_total",
+		metric.WithDescription("Audit entries accepted by the audit service"))
+	return &sender{serviceName: serviceName, client: client, failures: failures, sent: sent, tracer: otel.Tracer(meterName)}
+}
 
-	// Resource type and action come from handler enrichment.
-	// If not enriched, the raw procedure name is used.
-	var resourceType, action, resourceID, targetProfileID, stateFrom, stateTo string
-	if entry != nil {
-		resourceType = entry.ResourceType
-		action = entry.Action
-		resourceID = entry.ResourceID
-		targetProfileID = entry.TargetProfileID
-		stateFrom = entry.StateFrom
-		stateTo = entry.StateTo
-	}
-	if resourceType == "" {
-		resourceType = procedure
-	}
-	if action == "" {
-		action = "execute"
-	}
+// record logs the action and sends it synchronously. It never returns an
+// error: a failure is logged and counted (soft-fail).
+func (s *sender) record(ctx, enriched context.Context, actor Actor, procedure string, start time.Time, callErr error) {
+	entry := entryFromContext(enriched)
+	req := s.buildRequest(ctx, actor, entry, procedure, callErr)
 
-	// Build structured log fields.
 	fields := map[string]any{
-		"audit":         true,
-		"service":       a.serviceName,
-		"procedure":     procedure,
-		"action":        action,
-		"resource_type": resourceType,
-		"duration_ms":   time.Since(start).Milliseconds(),
-		"success":       callErr == nil,
+		"audit": true, "service": s.serviceName, "procedure": procedure,
+		"action": req.GetAction(), "resource_type": req.GetResourceType(),
+		"duration_ms": time.Since(start).Milliseconds(), "success": callErr == nil,
+		"profile_id": actor.ProfileID,
 	}
-
-	var profileID, deviceID string
-	if claims != nil {
-		profileID = claims.GetProfileID()
-		deviceID = claims.GetDeviceID()
-		fields["profile_id"] = profileID
+	if claims := security.ClaimsFromContext(ctx); claims != nil {
 		fields["tenant_id"] = claims.GetTenantID()
 		fields["partition_id"] = claims.GetPartitionID()
-		fields["access_id"] = claims.GetAccessID()
-		fields["session_id"] = claims.GetSessionID()
-		fields["device_id"] = deviceID
-		fields["roles"] = claims.GetRoles()
 	}
-
-	if resourceID != "" {
-		fields["resource_id"] = resourceID
+	if actor.OnBehalfOf != "" {
+		fields["on_behalf_of"] = actor.OnBehalfOf
+		fields["service_account_id"] = actor.ServiceAccountID
 	}
-	var ipAddress, userAgent string
-	if entry != nil {
-		ipAddress = entry.IPAddress
-		userAgent = entry.UserAgent
-		if ipAddress != "" {
-			fields["ip_address"] = ipAddress
-		}
-		if userAgent != "" {
-			fields["user_agent"] = userAgent
-		}
+	if req.GetResourceId() != "" {
+		fields["resource_id"] = req.GetResourceId()
 	}
-	if stateFrom != "" || stateTo != "" {
-		fields["state_from"] = stateFrom
-		fields["state_to"] = stateTo
-	}
-	if requestBody != "" {
-		fields["request"] = requestBody
-	}
-	var respBody string
-	if a.config.AuditCaptureResponseBody() {
-		respBody = marshalResponse(resp)
-		if respBody != "" {
-			fields["response"] = respBody
-		}
+	if req.GetStateFrom() != "" || req.GetStateTo() != "" {
+		fields["state_from"] = req.GetStateFrom()
+		fields["state_to"] = req.GetStateTo()
 	}
 	if callErr != nil {
 		fields["error"] = callErr.Error()
 	}
-
-	desc := fmt.Sprintf("%s %s", action, resourceType)
-	if stateFrom != "" && stateTo != "" {
-		desc += fmt.Sprintf(" (%s → %s)", stateFrom, stateTo)
-	}
+	desc := fmt.Sprintf("%s %s", req.GetAction(), req.GetResourceType())
 	if callErr != nil {
 		desc += " (failed)"
 	}
-
 	logger := util.Log(ctx).WithFields(fields)
 	defer logger.Release()
 	if callErr != nil {
@@ -430,97 +437,90 @@ func (a *Interceptor) record(
 		logger.Info(desc)
 	}
 
-	// Send to audit service asynchronously (best-effort).
-	if a.auditClient != nil && profileID != "" {
-		go a.send(ctx, profileID, action, resourceType, resourceID,
-			deviceID, targetProfileID, entry, requestBody, respBody, callErr)
-	}
-}
-
-func (a *Interceptor) send(
-	ctx context.Context,
-	profileID, action, resourceType, resourceID,
-	deviceID, targetProfileID string,
-	entry *Entry,
-	requestBody, responseBody string,
-	callErr error,
-) {
-	sendCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	if claims := security.ClaimsFromContext(ctx); claims != nil {
-		sendCtx = claims.ClaimsToContext(sendCtx)
-	}
-
-	// Build details — everything goes into one Struct for the audit service.
-	detailsMap := map[string]any{
-		"service": a.serviceName,
-	}
-	if requestBody != "" {
-		detailsMap["request"] = requestBody
-	}
-	if responseBody != "" {
-		detailsMap["response"] = responseBody
-	}
-	if callErr != nil {
-		detailsMap["error"] = callErr.Error()
-	}
-
-	// State change.
-	if entry != nil {
-		if entry.StateFrom != "" {
-			detailsMap["state_from"] = entry.StateFrom
-		}
-		if entry.StateTo != "" {
-			detailsMap["state_to"] = entry.StateTo
-		}
-
-		// Relations — stored as a list of maps for queryability.
-		if len(entry.Relations) > 0 {
-			rels := make([]any, 0, len(entry.Relations))
-			for _, r := range entry.Relations {
-				rels = append(rels, map[string]any{
-					"parent_type": r.ParentType,
-					"parent_id":   r.ParentID,
-					"child_type":  r.ChildType,
-					"child_id":    r.ChildID,
-					"action":      r.Action,
-				})
-			}
-			detailsMap["relations"] = rels
-		}
-
-		// Handler-provided details.
-		for k, v := range entry.Details {
-			detailsMap[k] = v
-		}
-	}
-
-	details, err := structpb.NewStruct(detailsMap)
-	if err != nil {
+	if s.client == nil {
 		return
 	}
+	sendCtx, span := s.tracer.Start(ctx, "audit.send")
+	defer span.End()
+	if _, err := s.client.CreateAuditEntry(sendCtx, connect.NewRequest(req)); err != nil {
+		code := connect.CodeOf(err).String()
+		s.failures.Add(ctx, 1, metric.WithAttributes(attribute.String("service", s.serviceName), attribute.String("code", code)))
+		util.Log(ctx).WithError(err).WithField("audit", true).WithField("code", code).
+			Warn("audit entry not delivered; structured log is the only record")
+		return
+	}
+	s.sent.Add(ctx, 1, metric.WithAttributes(attribute.String("service", s.serviceName)))
+}
 
-	var ipAddr, ua string
+// buildRequest assembles the wire request from the actor, enrichment and
+// outcome. No request or response bodies are ever captured.
+func (s *sender) buildRequest(ctx context.Context, actor Actor, entry *Entry, procedure string, callErr error) *auditv1.CreateAuditEntryRequest {
+	req := &auditv1.CreateAuditEntryRequest{}
+	req.SetProfileId(actor.ProfileID)
+	req.SetOnBehalfOf(actor.OnBehalfOf)
+	req.SetService(s.serviceName)
+	req.SetDeviceId(actor.DeviceID)
+
+	action, resourceType := "execute", procedure
+	details := map[string]any{}
 	if entry != nil {
-		ipAddr = entry.IPAddress
-		ua = entry.UserAgent
+		if entry.Action != "" {
+			action = entry.Action
+		}
+		if entry.ResourceType != "" {
+			resourceType = entry.ResourceType
+		}
+		req.SetResourceId(entry.ResourceID)
+		req.SetResourceVersion(entry.ResourceVersion)
+		req.SetTargetProfileId(entry.TargetProfileID)
+		req.SetStateFrom(entry.StateFrom)
+		req.SetStateTo(entry.StateTo)
+		req.SetIpAddress(entry.IPAddress)
+		req.SetUserAgent(entry.UserAgent)
+		req.SetEntryId(entry.EntryID)
+		req.SetCorrelationId(entry.CorrelationID)
+		req.SetEventId(entry.EventID)
+		req.SetIntentId(entry.IntentID)
+		req.SetInstanceId(entry.InstanceID)
+		req.SetPayloadHash(entry.PayloadHash)
+		req.SetAuthorizationHash(entry.AuthorizationHash)
+		req.SetPolicyHash(entry.PolicyHash)
+		req.SetDeviceKeyId(entry.DeviceKeyID)
+		if !entry.OccurredAt.IsZero() {
+			req.SetOccurredAt(timestamppb.New(entry.OccurredAt))
+		}
+		if len(entry.Relations) > 0 {
+			rels := make([]*auditv1.AuditRelation, 0, len(entry.Relations))
+			for _, r := range entry.Relations {
+				rel := &auditv1.AuditRelation{}
+				rel.SetParentType(r.ParentType)
+				rel.SetParentId(r.ParentID)
+				rel.SetChildType(r.ChildType)
+				rel.SetChildId(r.ChildID)
+				rel.SetAction(r.Action)
+				rels = append(rels, rel)
+			}
+			req.SetRelations(rels)
+		}
+		for k, v := range entry.Details {
+			details[k] = v
+		}
 	}
-
-	req := &auditv1.CreateAuditEntryRequest{
-		ProfileId:       profileID,
-		Action:          action,
-		ResourceType:    resourceType,
-		ResourceId:      resourceID,
-		Service:         a.serviceName,
-		Details:         details,
-		IpAddress:       ipAddr,
-		UserAgent:       ua,
-		DeviceId:        deviceID,
-		TargetProfileId: targetProfileID,
+	req.SetAction(action)
+	req.SetResourceType(resourceType)
+	if callErr != nil {
+		details["error"] = callErr.Error()
+		details["error_code"] = connect.CodeOf(callErr).String()
 	}
-
-	_, _ = a.auditClient.CreateAuditEntry(sendCtx, connect.NewRequest(req))
+	if len(details) > 0 {
+		if st, err := structpb.NewStruct(details); err == nil {
+			req.SetDetails(st)
+		}
+	}
+	if span := trace.SpanContextFromContext(ctx); span.HasTraceID() {
+		req.SetTraceId(span.TraceID().String())
+	}
+	return req
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -529,9 +529,7 @@ func (a *Interceptor) send(
 
 // extractIPAddress reads the client IP from standard proxy headers.
 func extractIPAddress(h http.Header) string {
-	// X-Forwarded-For is the standard header set by proxies/load balancers.
 	if xff := h.Get("X-Forwarded-For"); xff != "" {
-		// First IP in the list is the original client.
 		if i := strings.IndexByte(xff, ','); i > 0 {
 			return strings.TrimSpace(xff[:i])
 		}
@@ -539,39 +537,6 @@ func extractIPAddress(h http.Header) string {
 	}
 	if xri := h.Get("X-Real-Ip"); xri != "" {
 		return strings.TrimSpace(xri)
-	}
-	return ""
-}
-
-func marshalProto(msg any) string {
-	pm, ok := msg.(proto.Message)
-	if !ok || pm == nil {
-		return ""
-	}
-	b, err := protojson.MarshalOptions{EmitUnpopulated: false, UseProtoNames: true}.Marshal(pm)
-	if err != nil {
-		return ""
-	}
-	s := string(b)
-	if len(s) > 4096 {
-		return s[:4096] + "...(truncated)"
-	}
-	return s
-}
-
-func marshalResponse(resp connect.AnyResponse) string {
-	if resp == nil {
-		return ""
-	}
-	val := reflect.ValueOf(resp)
-	switch val.Kind() { //nolint:exhaustive
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		if val.IsNil() {
-			return ""
-		}
-	}
-	if msg := resp.Any(); msg != nil {
-		return marshalProto(msg)
 	}
 	return ""
 }

@@ -15,37 +15,17 @@
 package audit
 
 import (
-	"bytes"
-	"context"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	auditv1connect "buf.build/gen/go/antinvestor/audit/connectrpc/go/audit/v1/auditv1connect"
-	auditv1 "buf.build/gen/go/antinvestor/audit/protocolbuffers/go/audit/v1"
-	"connectrpc.com/connect"
-	"github.com/pitabwire/frame/v2/security"
-	"github.com/pitabwire/util"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
-// HTTPMiddleware returns an http.Handler middleware that audits REST API calls.
-//
-// It captures the same information as the Connect RPC Interceptor:
-// actor (from JWT claims), method, path, request body, response status,
-// duration, IP address, user agent, and any handler enrichment via context.
-//
-// Handlers can enrich the audit context using the same With* functions:
-//
-//	func myHandler(w http.ResponseWriter, r *http.Request) {
-//	    audit.WithResource(r.Context(), "profile", profileID)
-//	    audit.WithDetail(r.Context(), "action", "export")
-//	    // ...
-//	}
-//
-// Usage:
+// HTTPMiddleware returns an http.Handler middleware that audits REST calls
+// with the same actor rule, enrichment and synchronous soft-fail delivery
+// as the Connect interceptor. Bodies are never captured.
 //
 //	auditedHandler := audit.HTTPMiddleware("service_profile", auditClient)(myHandler)
 func HTTPMiddleware(
@@ -57,49 +37,50 @@ func HTTPMiddleware(
 	if len(cfgs) > 0 && cfgs[0] != nil {
 		cfg = cfgs[0]
 	}
+	snd := newSender(serviceName, auditClient)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Skip internal calls and non-mutating methods per config.
-			if shouldSkipInternal(r.Context()) || cfg.AuditShouldSkipHTTP(r.Method) {
+			if cfg.AuditShouldSkipHTTP(r.Method) {
 				next.ServeHTTP(w, r)
 				return
 			}
-
 			start := time.Now()
-
-			// Pre-populate audit entry in context.
+			actorCtx := r.Context()
 			ctx := initEntry(r.Context())
 			if e := entryFromContext(ctx); e != nil {
 				e.IPAddress = extractIPAddress(r.Header)
 				e.UserAgent = r.UserAgent()
+				if e.Action == "" {
+					e.Action = r.Method
+				}
 			}
 			r = r.WithContext(ctx)
 
-			// Capture request body if configured.
-			var reqBody string
-			if cfg.AuditCaptureRequestBody() {
-				reqBody = captureRequestBody(r)
-			}
-
-			// Wrap response writer to capture status code.
 			rw := &statusWriter{ResponseWriter: w, statusCode: http.StatusOK}
-
 			next.ServeHTTP(rw, r)
 
-			// Record the audit entry.
-			recordHTTPEntry(
-				r.Context(),
-				serviceName,
-				auditClient,
-				r.Method,
-				r.URL.Path,
-				start,
-				reqBody,
-				rw.statusCode,
-			)
+			actor, ok := ResolveActor(ctx)
+			if !ok {
+				return
+			}
+			var callErr error
+			if rw.statusCode >= http.StatusBadRequest {
+				callErr = &httpStatusError{status: rw.statusCode}
+			}
+			snd.record(actorCtx, ctx, actor, r.URL.Path, start, callErr)
 		})
 	}
 }
+
+type httpStatusError struct{ status int }
+
+func (e *httpStatusError) Error() string { return fmt.Sprintf("http %d", e.status) }
+
+// Is lets callers match any HTTP failure with errors.Is(err, ErrHTTPFailure).
+func (e *httpStatusError) Is(target error) bool { return errors.Is(target, ErrHTTPFailure) }
+
+// ErrHTTPFailure marks an audited HTTP call that returned >= 400.
+var ErrHTTPFailure = errors.New("audited http call failed")
 
 // statusWriter wraps http.ResponseWriter to capture the status code.
 type statusWriter struct {
@@ -121,189 +102,4 @@ func (sw *statusWriter) Write(b []byte) (int, error) {
 		sw.written = true
 	}
 	return sw.ResponseWriter.Write(b)
-}
-
-// captureRequestBody reads and restores the request body (up to 4KB).
-func captureRequestBody(r *http.Request) string {
-	if r.Body == nil {
-		return ""
-	}
-	const maxLen = 4096
-	buf := make([]byte, maxLen+1)
-	n, _ := io.ReadFull(r.Body, buf)
-	_ = r.Body.Close()
-
-	// Restore the body for the handler.
-	if n > 0 {
-		if n > maxLen {
-			r.Body = io.NopCloser(io.MultiReader(
-				bytes.NewReader(buf[:maxLen]),
-				strings.NewReader("...(truncated)"),
-			))
-			return string(buf[:maxLen]) + "...(truncated)"
-		}
-		r.Body = io.NopCloser(bytes.NewReader(buf[:n]))
-		return string(buf[:n])
-	}
-	r.Body = io.NopCloser(bytes.NewReader(nil))
-	return ""
-}
-
-// recordHTTPEntry logs and sends the audit entry for an HTTP request.
-func recordHTTPEntry(
-	ctx context.Context,
-	serviceName string,
-	auditClient auditv1connect.AuditServiceClient,
-	method, path string,
-	start time.Time,
-	reqBody string,
-	statusCode int,
-) {
-	claims := security.ClaimsFromContext(ctx)
-	entry := entryFromContext(ctx)
-
-	// Resource type and action come from handler enrichment.
-	var resourceType, action, resourceID, targetProfileID, ipAddr, userAgent string
-	if entry != nil {
-		resourceType = entry.ResourceType
-		action = entry.Action
-		resourceID = entry.ResourceID
-		targetProfileID = entry.TargetProfileID
-		ipAddr = entry.IPAddress
-		userAgent = entry.UserAgent
-	}
-	if resourceType == "" {
-		resourceType = path
-	}
-	if action == "" {
-		action = method
-	}
-
-	success := statusCode >= 200 && statusCode < 400
-
-	// Structured log.
-	fields := map[string]any{
-		"audit":         true,
-		"service":       serviceName,
-		"http_method":   method,
-		"http_path":     path,
-		"http_status":   statusCode,
-		"action":        action,
-		"resource_type": resourceType,
-		"duration_ms":   time.Since(start).Milliseconds(),
-		"success":       success,
-	}
-
-	var profileID, deviceID string
-	if claims != nil {
-		profileID = claims.GetProfileID()
-		deviceID = claims.GetDeviceID()
-		fields["profile_id"] = profileID
-		fields["tenant_id"] = claims.GetTenantID()
-		fields["partition_id"] = claims.GetPartitionID()
-		fields["session_id"] = claims.GetSessionID()
-		fields["device_id"] = deviceID
-	}
-
-	if resourceID != "" {
-		fields["resource_id"] = resourceID
-	}
-	if ipAddr != "" {
-		fields["ip_address"] = ipAddr
-	}
-	if userAgent != "" {
-		fields["user_agent"] = userAgent
-	}
-	if reqBody != "" {
-		fields["request"] = reqBody
-	}
-
-	desc := fmt.Sprintf("%s %s %s [%d]", method, action, resourceType, statusCode)
-
-	logger := util.Log(ctx).WithFields(fields)
-	defer logger.Release()
-	if !success {
-		logger.Warn(desc)
-	} else {
-		logger.Info(desc)
-	}
-
-	// Send to audit service.
-	if auditClient != nil && profileID != "" {
-		go sendHTTPEntry(ctx, auditClient, serviceName, profileID,
-			action, resourceType, resourceID, deviceID,
-			targetProfileID, ipAddr, userAgent, entry,
-			method, path, reqBody, statusCode)
-	}
-}
-
-func sendHTTPEntry(
-	ctx context.Context,
-	auditClient auditv1connect.AuditServiceClient,
-	serviceName, profileID, action, resourceType, resourceID,
-	deviceID, targetProfileID, ipAddr, userAgent string,
-	entry *Entry,
-	method, path, reqBody string,
-	statusCode int,
-) {
-	sendCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	if claims := security.ClaimsFromContext(ctx); claims != nil {
-		sendCtx = claims.ClaimsToContext(sendCtx)
-	}
-
-	detailsMap := map[string]any{
-		"service":     serviceName,
-		"http_method": method,
-		"http_path":   path,
-		"http_status": statusCode,
-	}
-	if reqBody != "" {
-		detailsMap["request"] = reqBody
-	}
-	if entry != nil {
-		if entry.StateFrom != "" {
-			detailsMap["state_from"] = entry.StateFrom
-		}
-		if entry.StateTo != "" {
-			detailsMap["state_to"] = entry.StateTo
-		}
-		if len(entry.Relations) > 0 {
-			rels := make([]any, 0, len(entry.Relations))
-			for _, r := range entry.Relations {
-				rels = append(rels, map[string]any{
-					"parent_type": r.ParentType,
-					"parent_id":   r.ParentID,
-					"child_type":  r.ChildType,
-					"child_id":    r.ChildID,
-					"action":      r.Action,
-				})
-			}
-			detailsMap["relations"] = rels
-		}
-		for k, v := range entry.Details {
-			detailsMap[k] = v
-		}
-	}
-
-	details, err := structpb.NewStruct(detailsMap)
-	if err != nil {
-		return
-	}
-
-	req := &auditv1.CreateAuditEntryRequest{
-		ProfileId:       profileID,
-		Action:          action,
-		ResourceType:    resourceType,
-		ResourceId:      resourceID,
-		Service:         serviceName,
-		Details:         details,
-		IpAddress:       ipAddr,
-		UserAgent:       userAgent,
-		DeviceId:        deviceID,
-		TargetProfileId: targetProfileID,
-	}
-
-	_, _ = auditClient.CreateAuditEntry(sendCtx, connect.NewRequest(req))
 }
