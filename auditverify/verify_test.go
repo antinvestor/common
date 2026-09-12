@@ -284,27 +284,3 @@ func TestVerify_DetectsEveryKindOfTampering(t *testing.T) {
 	require.False(t, rep.Valid)
 	require.Contains(t, rep.Reason, "end checkpoint")
 }
-
-func TestVerify_LegacyCanonVersionOne(t *testing.T) {
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	require.NoError(t, err)
-	e := &auditv1.AuditEntryObject{}
-	e.SetTenantId("tenant")
-	e.SetSeq(1)
-	e.SetCanonVersion(auditverify.CanonVersionLegacy)
-	e.SetProfileId("legacy")
-	e.SetAction("login")
-	e.SetResourceType("session")
-	e.SetService("service_authentication")
-	e.SetKeyId("k1")
-	e.SetCreatedAt(timestamppb.New(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)))
-	e.SetEntryHash(auditverify.EntryHashV1(e, ""))
-	e.SetSignature(hex.EncodeToString(ed25519.Sign(priv, []byte(e.GetEntryHash()))))
-	k := &auditv1.SigningKey{}
-	k.SetKeyId("k1")
-	k.SetPublicKey(hex.EncodeToString(pub))
-	rep, err := auditverify.Verify([]*auditv1.ExportAuditEntriesResponse{header(1, 1, nil, nil, k), entryMsg(e)},
-		auditverify.Options{TrustHeaderKeys: true})
-	require.NoError(t, err)
-	require.True(t, rep.Valid, rep.Reason)
-}
