@@ -34,11 +34,8 @@ import (
 	auditv1 "buf.build/gen/go/antinvestor/audit/protocolbuffers/go/audit/v1"
 )
 
-// Canonical encoding versions.
-const (
-	CanonVersionLegacy = 1
-	CanonVersionV2     = 2
-)
+// CanonVersionV2 is the only canonical encoding; any change is a new version.
+const CanonVersionV2 = 2
 
 const canonTimeLayout = "2006-01-02T15:04:05.000000Z"
 
@@ -269,37 +266,12 @@ func EntryHashV2(e *auditv1.AuditEntryObject, previousHash string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// EntryHashV1 reproduces the pre-v2 pipe-delimited pre-image for entries
-// with canon_version 1. It must never change.
-func EntryHashV1(e *auditv1.AuditEntryObject, previousHash string) string {
-	var detailsJSON []byte
-	if e.GetDetails() == nil {
-		detailsJSON = []byte("null")
-	} else {
-		detailsJSON, _ = json.Marshal(e.GetDetails().AsMap())
-	}
-	createdAt := ""
-	if e.GetCreatedAt() != nil {
-		createdAt = e.GetCreatedAt().AsTime().UTC().Format(canonTimeLayout)
-	}
-	payload := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s",
-		e.GetProfileId(), e.GetAction(), e.GetResourceType(), e.GetResourceId(), e.GetService(),
-		string(detailsJSON), e.GetIpAddress(), e.GetUserAgent(), e.GetDeviceId(),
-		e.GetTargetProfileId(), e.GetTraceId(), createdAt, previousHash)
-	sum := sha256.Sum256([]byte(payload))
-	return hex.EncodeToString(sum[:])
-}
-
 // EntryHash dispatches on canon_version.
 func EntryHash(e *auditv1.AuditEntryObject, previousHash string) (string, error) {
-	switch e.GetCanonVersion() {
-	case CanonVersionLegacy:
-		return EntryHashV1(e, previousHash), nil
-	case CanonVersionV2:
-		return EntryHashV2(e, previousHash), nil
-	default:
+	if e.GetCanonVersion() != CanonVersionV2 {
 		return "", fmt.Errorf("unsupported canon_version %d", e.GetCanonVersion())
 	}
+	return EntryHashV2(e, previousHash), nil
 }
 
 // CheckpointHash is hex(SHA-256("chk" ‖ tenant ‖ seq ‖ entry_hash ‖ created_at)).
@@ -316,23 +288,13 @@ func CheckpointHash(c *auditv1.AuditCheckpoint) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// VerifySignature checks sigHex over hashHex under canonVersion rules:
-// version 1 signed the hex string bytes, version 2 the raw digest.
+// VerifySignature checks sigHex over the raw 32-byte digest of hashHex.
 func VerifySignature(pub ed25519.PublicKey, hashHex, sigHex string, canonVersion int32) bool {
-	if len(pub) != ed25519.PublicKeySize {
+	if len(pub) != ed25519.PublicKeySize || canonVersion != CanonVersionV2 {
 		return false
 	}
-	var msg []byte
-	switch canonVersion {
-	case CanonVersionLegacy:
-		msg = []byte(hashHex)
-	case CanonVersionV2:
-		raw, err := hex.DecodeString(hashHex)
-		if err != nil || len(raw) != 32 {
-			return false
-		}
-		msg = raw
-	default:
+	msg, err := hex.DecodeString(hashHex)
+	if err != nil || len(msg) != 32 {
 		return false
 	}
 	sig, err := hex.DecodeString(sigHex)

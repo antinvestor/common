@@ -1,9 +1,9 @@
-buf.build/gen/go/antinvestor/audit/protocolbuffers/go v1.36.12-00000000000000-2d2c6497b768.2 h1:asin0zMyfVHlYsssrElCQ4p6c4e/GJ+sKe21ItFMibM=
-buf.build/gen/go/antinvestor/audit/protocolbuffers/go v1.36.12-00000000000000-2d2c6497b768.2/go.mod h1:AUaEI7CAaobs6C1wbWwB8EgxW9IjT+Ptwt8Y10fWIJQ=
-buf.build/gen/go/antinvestor/common/protocolbuffers/go v1.36.12-20260325040325-9771112f2289.2 h1:S9GQkqfVbnqGYkoxhszVn4eWxucNG6B2SKuyjJ6hchs=
-buf.build/gen/go/antinvestor/common/protocolbuffers/go v1.36.12-20260325040325-9771112f2289.2/go.mod h1:fhtYVnYa87jy85xdXCViFQ0nHkU978NSNSiSH9N9uvg=
-buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260209202127-80ab13bee0bf.2 h1:NhfSMiYoufvQqZd9mpa6tihd2G2jL2B95CmTpGLoN2o=
-buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260209202127-80ab13bee0bf.2/go.mod h1:TCt1lluMFnctISJXvkIQ4x3ABrPuUKCWKyjKdkJNBpw=
+buf.build/gen/go/antinvestor/audit/protocolbuffers/go v1.36.12-20260912192320-2865cc687b65.2 h1:vGz1rdC+WuqBH0JJq6AgylDEomeAYHq+ZnqBwyXTu8E=
+buf.build/gen/go/antinvestor/audit/protocolbuffers/go v1.36.12-20260912192320-2865cc687b65.2/go.mod h1:2M48o5NSbpBfSLoYKEq1ClTK5BNYBI294fRWfPGq7vI=
+buf.build/gen/go/antinvestor/common/protocolbuffers/go v1.36.12-20260509050709-3f270876dbf3.2 h1:Rzgdz5lQyym2xREfmEpybYF3U7W29Rhr64YBRv1GTTQ=
+buf.build/gen/go/antinvestor/common/protocolbuffers/go v1.36.12-20260509050709-3f270876dbf3.2/go.mod h1:lW0aq7sAW/QoJH7VBLMaadXYY6xFyIVW7dy4olw654M=
+buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2 h1:NbnlmV26O7oZ1iM5tsCI+GEx+3ZSdrhvnKQ/eWSrLiY=
+buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2/go.mod h1:TCt1lluMFnctISJXvkIQ4x3ABrPuUKCWKyjKdkJNBpw=
 buf.build/gen/go/gnostic/gnostic/protocolbuffers/go v1.36.12-20230414000709-087bc8072ce4.2 h1:ZXEI+qE54FRhRcNAJOpvwU6CLLTgF4Etr87l3qECkcI=
 buf.build/gen/go/gnostic/gnostic/protocolbuffers/go v1.36.12-20230414000709-087bc8072ce4.2/go.mod h1:Y6uGzulgNTMSJafTYzhV2xKPPiUnSoE1AStyVM9mBbI=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
