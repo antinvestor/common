@@ -40,6 +40,7 @@ COPYRIGHT_YEARS  ?= 2023-2026
 COPYRIGHT_HOLDER ?= Ant Investor Ltd
 # Pinned; keep in sync with the golangci-lint workflow input default.
 GOLANGCI_LINT_VERSION ?= v2.14.0
+TESTCONTAINERS_RYUK_RECONNECTION_TIMEOUT ?= 2m
 HAS_UI           ?= false
 UI_DIR           ?= ui
 
@@ -132,11 +133,17 @@ test: ## Run all tests (sequential packages, no race detection)
 	# parallel package execution causes container resource contention and
 	# auth-token invalidation between concurrently-starting stacks.
 	#
-	# -race is omitted here because pitabwire/frame's queue.subscriber.Stop()
-	# is not goroutine-safe with respect to its own listener goroutine. The
-	# race fires reliably during service cleanup in any test that instantiates
-	# a frame.Service (which is most of our integration suites). Until the
-	# upstream frame library fixes this, -race would make `make test` flaky.
+	# -race is omitted here to keep git hooks fast; CI runs it for repos that
+	# set the go-test workflow `race` input. (The frame v2 subscriber Stop()
+	# race that once made -race flaky no longer reproduces: full -race runs of
+	# service-authentication and service-profile were clean on 2026-09-29.)
+	#
+	# All packages in one `go test` run share a testcontainers session (keyed
+	# on the parent go process) and so one Ryuk reaper, which exits 10s after
+	# its last client disconnects. A package starting in that window reuses the
+	# dying reaper and fails with "wait for reaper ... context deadline
+	# exceeded: failed to create network". Keep the reaper up across packages.
+	TESTCONTAINERS_RYUK_RECONNECTION_TIMEOUT=$(TESTCONTAINERS_RYUK_RECONNECTION_TIMEOUT) \
 	$(GO) test -vet=off -cover -p 1 ./...
 
 .PHONY: vet
