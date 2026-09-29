@@ -1,6 +1,11 @@
 name: Go Tests
 on:
-  workflow_call: {}
+  workflow_call:
+    inputs:
+      race:
+        description: Run tests with the race detector.
+        type: boolean
+        default: false
 
 jobs:
   test:
@@ -26,4 +31,8 @@ jobs:
       # crashes gotestfmt v2.5.0 with "panic: BUG: Empty package name" on any
       # module-cache miss (e.g. a branch that changes go.sum).
       - run: go mod download
-      - run: go test -p 1 -json -v ./... 2>&1 | gotestfmt -hide all
+      - run: go test -p 1 ${{ inputs.race && '-race' || '' }} -json -v ./... 2>&1 | gotestfmt -hide all
+        env:
+          # Packages share one testcontainers reaper per run; keep it alive
+          # across packages (see Makefile.common `test`).
+          TESTCONTAINERS_RYUK_RECONNECTION_TIMEOUT: 2m
