@@ -1,6 +1,13 @@
 name: golangci-lint
 on:
-  workflow_call: {}
+  workflow_call:
+    inputs:
+      golangci-lint-version:
+        # Pinned so a new linter release cannot turn every repo's main red
+        # overnight. Keep in sync with GOLANGCI_LINT_VERSION in Makefile.common;
+        # upgrade deliberately (fix new findings, then bump both).
+        type: string
+        default: v2.14.0
 
 jobs:
   golangci:
@@ -35,5 +42,5 @@ jobs:
           fi
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          version: ${{ inputs.golangci-lint-version }}
           args: --timeout=5m
