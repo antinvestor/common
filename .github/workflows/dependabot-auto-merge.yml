@@ -18,7 +18,19 @@ jobs:
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: gh pr merge --auto --squash "$PR_URL"
+      # Idempotent: the auto-merge label workflow may have queued it first.
+      - run: |
+          if out=$(gh pr merge --auto --squash "$PR_URL" 2>&1); then
+            echo "$out"; exit 0
+          fi
+          echo "$out"
+          done=$(gh pr view "$PR_URL" --json state,autoMergeRequest \
+            --jq '.state == "MERGED" or .autoMergeRequest != null')
+          if [[ "$done" == true ]] || grep -qiE 'already in progress|already (been )?merged|auto-merge is already enabled' <<<"$out"; then
+            echo "merge already queued or in progress — nothing to do"
+            exit 0
+          fi
+          exit 1
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

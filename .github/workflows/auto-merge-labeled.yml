@@ -13,9 +13,23 @@ jobs:
       github.event_name == 'pull_request' &&
       contains(github.event.pull_request.labels.*.name, 'auto-merge')
     steps:
+      # Idempotent: dependabot PRs are also handled by dependabot-auto-merge,
+      # so the merge may already be queued or done by the time this runs.
       - name: Enable auto-merge
-        run: gh pr merge ${{ github.event.pull_request.number }} --auto --squash
+        run: |
+          if out=$(gh pr merge "$PR" --auto --squash 2>&1); then
+            echo "$out"; exit 0
+          fi
+          echo "$out"
+          state=$(gh pr view "$PR" --json state,autoMergeRequest \
+            --jq 'if .state == "MERGED" then "merged" elif .autoMergeRequest != null then "queued" else "" end')
+          if [[ -n "$state" ]] || grep -qiE 'already in progress|already (been )?merged|auto-merge is already enabled' <<<"$out"; then
+            echo "PR #$PR merge already ${state:-in progress} — nothing to do"
+            exit 0
+          fi
+          exit 1
         env:
+          PR: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
 
