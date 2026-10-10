@@ -54,6 +54,8 @@ const (
 	ServiceSeed                       ServiceID = "seed"
 	ServiceSettings                   ServiceID = "settings"
 	ServiceStawi                      ServiceID = "stawi"
+	ServiceStawiFinance               ServiceID = "stawi-finance"
+	ServiceStawiSettlement            ServiceID = "stawi-settlement"
 	ServiceTenancy                    ServiceID = "tenancy"
 	ServiceThesa                      ServiceID = "thesa"
 	ServiceTrustage                   ServiceID = "trustage"
@@ -108,6 +110,8 @@ var definitions = map[ServiceID]Definition{
 	ServiceSeed:                       {ID: ServiceSeed, AudiencePath: "/seed"},
 	ServiceSettings:                   {ID: ServiceSettings, AudiencePath: "/settings"},
 	ServiceStawi:                      {ID: ServiceStawi, AudiencePath: "/stawi"},
+	ServiceStawiFinance:               {ID: ServiceStawiFinance, AudiencePath: "/stawi-finance"},
+	ServiceStawiSettlement:            {ID: ServiceStawiSettlement, AudiencePath: "/stawi-settlement"},
 	ServiceTenancy:                    {ID: ServiceTenancy, AudiencePath: "/tenancy"},
 	ServiceThesa:                      {ID: ServiceThesa, AudiencePath: "/thesa"},
 	ServiceTrustage:                   {ID: ServiceTrustage, AudiencePath: "/trustage"},

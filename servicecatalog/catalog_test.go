@@ -100,6 +100,8 @@ func TestCatalogContainsCanonicalPlatformServices(t *testing.T) {
 		servicecatalog.ServiceSeed:                       "/seed",
 		servicecatalog.ServiceSettings:                   "/settings",
 		servicecatalog.ServiceStawi:                      "/stawi",
+		servicecatalog.ServiceStawiFinance:               "/stawi-finance",
+		servicecatalog.ServiceStawiSettlement:            "/stawi-settlement",
 		servicecatalog.ServiceTenancy:                    "/tenancy",
 		servicecatalog.ServiceThesa:                      "/thesa",
 		servicecatalog.ServiceTrustage:                   "/trustage",
@@ -107,7 +109,7 @@ func TestCatalogContainsCanonicalPlatformServices(t *testing.T) {
 
 	catalog, err := servicecatalog.New("https://api.example.org")
 	require.NoError(t, err)
-	require.Len(t, expected, 45)
+	require.Len(t, expected, 47)
 
 	for serviceID, audiencePath := range expected {
 		audience, audienceErr := catalog.Audience(serviceID)
