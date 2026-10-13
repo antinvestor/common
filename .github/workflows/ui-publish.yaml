@@ -1,14 +1,18 @@
 name: Publish Flutter UI to pub.dev
+# Tag ui/core/v<version> publishes ui_core (antinvestor_ui_core). The local
+# reusable workflow runs at this same commit; it refuses any ref that is not
+# a ui/*/v* tag on main.
 on:
   push:
     tags:
       - 'ui/*/v[0-9]+.[0-9]+.[0-9]+*'
-  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   publish:
     permissions:
       contents: read
       id-token: write
-    # Tag ui/core/v<version> publishes ui_core (antinvestor_ui_core).
     uses: ./.github/workflows/flutter-publish.yml

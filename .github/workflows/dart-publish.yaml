@@ -1,35 +1,59 @@
 name: Publish Dart SDK to pub.dev
+# Publishes sdk/dart/<package> from a dart/<package>/v<version> tag whose
+# commit is on main. Any other ref is refused before a job holds the pub.dev
+# OIDC token. Actions and the setup-dart reusable workflow are pinned to
+# commit SHAs; only the publish job gets id-token: write.
 on:
   push:
     tags:
       - 'dart/*/v[0-9]+.[0-9]+.[0-9]+*'
 
+permissions:
+  contents: read
+
 jobs:
   resolve:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       package: ${{ steps.extract.outputs.package }}
       working_dir: ${{ steps.extract.outputs.working_dir }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - id: extract
+        env:
+          REF: ${{ github.ref }}
         run: |
-          TAG="${GITHUB_REF#refs/tags/}"
+          set -euo pipefail
+          case "$REF" in
+            refs/tags/dart/*/v[0-9]*) ;;
+            *) echo "::error::Refusing to publish from $REF: only dart/<package>/v<version> tags publish"; exit 1 ;;
+          esac
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Refusing to publish: $GITHUB_SHA ($REF) is not on origin/main"
+            exit 1
+          fi
+          TAG="${REF#refs/tags/}"
           # Tag format: dart/{package}/v{version}
           PACKAGE=$(echo "$TAG" | cut -d'/' -f2)
           DIR="sdk/dart/$PACKAGE"
           if [ ! -f "$DIR/pubspec.yaml" ]; then
-            echo "No pubspec.yaml found at $DIR for tag $TAG"
+            echo "::error::No pubspec.yaml found at $DIR for tag $TAG"
             exit 1
           fi
-          echo "package=$PACKAGE" >> $GITHUB_OUTPUT
-          echo "working_dir=$DIR" >> $GITHUB_OUTPUT
-          echo "Publishing $PACKAGE from $DIR (tag: $TAG)"
+          echo "package=$PACKAGE" >> "$GITHUB_OUTPUT"
+          echo "working_dir=$DIR" >> "$GITHUB_OUTPUT"
+          echo "Publishing $PACKAGE from $DIR (tag: $TAG, commit $GITHUB_SHA on main)"
 
   publish:
     needs: resolve
     permissions:
+      contents: read
       id-token: write
-    uses: dart-lang/setup-dart/.github/workflows/publish.yml@v1
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
     with:
       working-directory: ${{ needs.resolve.outputs.working_dir }}
