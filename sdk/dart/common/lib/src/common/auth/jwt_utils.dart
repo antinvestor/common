@@ -13,10 +13,10 @@ class JwtUtils {
 
     // Decode the payload (second part)
     final payload = parts[1];
-    
+
     // Add padding if necessary
     var normalized = base64Url.normalize(payload);
-    
+
     try {
       final decoded = utf8.decode(base64Url.decode(normalized));
       return json.decode(decoded) as Map<String, dynamic>;
@@ -47,7 +47,7 @@ class JwtUtils {
     try {
       final payload = parseJwt(token);
       final exp = payload['exp'];
-      
+
       if (exp == null) {
         // No expiry claim - consider it expired for safety
         return true;
@@ -79,7 +79,7 @@ class JwtUtils {
     try {
       final payload = parseJwt(token);
       final exp = payload['exp'];
-      
+
       if (exp == null) {
         return null;
       }

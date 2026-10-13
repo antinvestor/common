@@ -61,28 +61,16 @@ export 'src/common/v1/money.pb.dart';
 export 'src/common/v1/money.pbenum.dart';
 export 'src/common/v1/money.pbjson.dart';
 
-// Export well-known types (shared across all service packages)
-export 'src/google/protobuf/struct.pb.dart';
-export 'src/google/protobuf/struct.pbenum.dart';
-export 'src/google/protobuf/struct.pbjson.dart';
-export 'src/google/protobuf/timestamp.pb.dart';
-export 'src/google/protobuf/timestamp.pbenum.dart';
-export 'src/google/protobuf/timestamp.pbjson.dart';
-export 'src/google/protobuf/duration.pb.dart';
-export 'src/google/protobuf/duration.pbenum.dart';
-export 'src/google/protobuf/duration.pbjson.dart';
-export 'src/google/protobuf/any.pb.dart';
-export 'src/google/protobuf/any.pbenum.dart';
-export 'src/google/protobuf/any.pbjson.dart';
-
-// Export Google types (shared across all service packages).
+// Export well-known types (shared across all service packages).
 //
-// google.type.Money / Money$json are intentionally hidden — services have
-// migrated to common.v1.Money (re-exported above). The remaining
-// google.type.* re-exports stay for codes that still use Interval, etc.
-export 'src/google/type/interval.pb.dart';
-export 'src/google/type/interval.pbenum.dart';
-export 'src/google/type/interval.pbjson.dart';
-export 'src/google/type/money.pb.dart' hide Money;
-export 'src/google/type/money.pbenum.dart';
-export 'src/google/type/money.pbjson.dart' hide Money$json, moneyDescriptor;
+// Since 2.0.0 these come from the protobuf runtime, so every SDK shares one
+// Timestamp/Struct/Duration/Any type.
+export 'package:protobuf/well_known_types/google/protobuf/struct.pb.dart';
+export 'package:protobuf/well_known_types/google/protobuf/struct.pbenum.dart';
+export 'package:protobuf/well_known_types/google/protobuf/struct.pbjson.dart';
+export 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart';
+export 'package:protobuf/well_known_types/google/protobuf/timestamp.pbjson.dart';
+export 'package:protobuf/well_known_types/google/protobuf/duration.pb.dart';
+export 'package:protobuf/well_known_types/google/protobuf/duration.pbjson.dart';
+export 'package:protobuf/well_known_types/google/protobuf/any.pb.dart';
+export 'package:protobuf/well_known_types/google/protobuf/any.pbjson.dart';
