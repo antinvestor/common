@@ -4,27 +4,36 @@
 # no Flutter SDK), so this workflow installs both: setup-dart registers the
 # pub.dev OIDC token, then the Flutter SDK publishes with it.
 #
-# Caller (in the package repository):
+# Caller (in the package repository). Pin this workflow to a commit SHA of
+# antinvestor/common, never a branch, because it runs with the caller's
+# pub.dev publishing token:
 #
 #   on:
 #     push:
 #       tags: ['ui/*/v[0-9]+.[0-9]+.[0-9]+*']
-#     workflow_dispatch:
+#     workflow_dispatch: # only for auto-tag: gh workflow run --ref <tag>
+#   permissions:
+#     contents: read
 #   jobs:
 #     publish:
 #       permissions:
 #         contents: read
 #         id-token: write
-#       uses: antinvestor/common/.github/workflows/flutter-publish.yml@main
+#       uses: antinvestor/common/.github/workflows/flutter-publish.yml@<sha> # <date/PR>
 #
-# The tag is ui/<name>/v<version>. <name> resolves to the first directory
-# that holds a pubspec.yaml: the dir_map entry, ui_<name>, ui/<name>, then
-# ui (single-UI repositories). The pubspec version must equal <version>.
+# Accepted refs: only a tag ui/<name>/v<version> whose commit is on main.
+# Anything else (a branch, a tag on an unmerged commit) is refused before
+# any job holds the OIDC token. <name> resolves to the first directory that
+# holds a pubspec.yaml: the dir_map entry, ui_<name>, ui/<name>, then ui
+# (single-UI repositories). The pubspec version must equal <version>.
 #
-# pub.dev must list this repository under the package's automated
+# Every third-party action is pinned to a commit SHA. Only the publish job
+# gets id-token: write.
+#
+# pub.dev must list the repository under the package's automated
 # publishing settings with the tag pattern ui/<name>/v{{version}}; tick
 # "publishing from workflow_dispatch events" when tags are dispatched by
-# another workflow (auto-tag) instead of pushed.
+# the auto-tag workflow instead of pushed.
 name: Publish Flutter package to pub.dev
 on:
   workflow_call:
@@ -40,6 +49,9 @@ on:
         default: ""
         type: string
 
+permissions:
+  contents: read
+
 jobs:
   resolve:
     runs-on: ubuntu-latest
@@ -48,23 +60,33 @@ jobs:
     outputs:
       working_dir: ${{ steps.extract.outputs.working_dir }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
       - id: extract
         env:
           REF: ${{ github.ref }}
           DIR_MAP: ${{ inputs.dir_map }}
         run: |
+          set -euo pipefail
           case "$REF" in
-            refs/tags/ui/*/v*) ;;
-            *) echo "::error::$REF is not a ui/<name>/v<version> tag"; exit 1 ;;
+            refs/tags/ui/*/v[0-9]*) ;;
+            *) echo "::error::Refusing to publish from $REF: only ui/<name>/v<version> tags publish"; exit 1 ;;
           esac
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Refusing to publish: $GITHUB_SHA ($REF) is not on origin/main"
+            exit 1
+          fi
+
           TAG="${REF#refs/tags/}"
           NAME=$(echo "$TAG" | cut -d/ -f2)
           VERSION="${TAG##*/v}"
 
           DIR=""
           for pair in $DIR_MAP; do
-            [ "${pair%%=*}" = "$NAME" ] && DIR="${pair#*=}"
+            if [ "${pair%%=*}" = "$NAME" ]; then DIR="${pair#*=}"; fi
           done
           if [ -z "$DIR" ]; then
             for candidate in "ui_$NAME" "ui/$NAME" "ui"; do
@@ -81,7 +103,7 @@ jobs:
           fi
 
           echo "working_dir=$DIR" >> "$GITHUB_OUTPUT"
-          echo "Publishing $DIR $VERSION (tag $TAG)"
+          echo "Publishing $DIR $VERSION (tag $TAG, commit $GITHUB_SHA on main)"
 
   publish:
     needs: resolve
@@ -93,17 +115,19 @@ jobs:
       run:
         working-directory: ${{ needs.resolve.outputs.working_dir }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
 
       # Registers the pub.dev OIDC token (PUB_TOKEN) in the user-level dart
       # config, which the Flutter SDK's pub reads as well.
-      - uses: dart-lang/setup-dart@v1
+      - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
 
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           channel: ${{ contains(fromJSON('["stable","beta","master","main"]'), inputs.flutter_version) && inputs.flutter_version || 'stable' }}
           flutter-version: ${{ !contains(fromJSON('["stable","beta","master","main"]'), inputs.flutter_version) && inputs.flutter_version || '' }}
-          cache: true
+          cache: false
 
       - run: flutter pub get
       - run: flutter pub publish --dry-run
