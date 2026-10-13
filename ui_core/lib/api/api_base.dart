@@ -46,9 +46,7 @@ class AuthInterceptor {
 
         final newToken = await _tokenProvider.forceRefreshAccessToken();
         if (newToken == null) {
-          AppLogger.error(
-            'Token refresh failed — logging out',
-          );
+          AppLogger.error('Token refresh failed — logging out');
           _triggerAuthFailure();
           rethrow;
         }

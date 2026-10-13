@@ -62,7 +62,9 @@ class PaginatedStreamController<R, T> {
   final int _maxPages;
 
   StreamSubscription<R>? _subscription;
-  late final _stateNotifier = ValueNotifier<PaginatedState<T>>(const PaginatedState());
+  late final _stateNotifier = ValueNotifier<PaginatedState<T>>(
+    const PaginatedState(),
+  );
   int _pagesLoaded = 0;
   Completer<void>? _pageCompleter;
   bool _streamExhausted = false;

@@ -57,15 +57,15 @@ class AmountDisplay extends StatelessWidget {
     if (_isPlaceholder(amount)) {
       return Text(
         '$prefix$placeholder$suffix',
-        style: style ??
-            (compact
-                ? theme.textTheme.bodySmall
-                : theme.textTheme.bodyMedium),
+        style:
+            style ??
+            (compact ? theme.textTheme.bodySmall : theme.textTheme.bodyMedium),
       );
     }
 
-    final formatted =
-        showCurrency ? formatMoney(amount) : moneyToAmountString(amount);
+    final formatted = showCurrency
+        ? formatMoney(amount)
+        : moneyToAmountString(amount);
     final display = '$prefix$formatted$suffix';
 
     Color? textColor;
@@ -84,7 +84,8 @@ class AmountDisplay extends StatelessWidget {
         break;
     }
 
-    final baseStyle = style ??
+    final baseStyle =
+        style ??
         (compact ? theme.textTheme.bodySmall : theme.textTheme.bodyMedium);
 
     return Text(

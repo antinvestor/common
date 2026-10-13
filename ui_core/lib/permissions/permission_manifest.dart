@@ -15,8 +15,7 @@ class PermissionManifest {
   final List<PermissionEntry> permissions;
 
   /// All unique permission keys for batch checking.
-  Set<String> get allPermissionKeys =>
-      permissions.map((p) => p.key).toSet();
+  Set<String> get allPermissionKeys => permissions.map((p) => p.key).toSet();
 }
 
 /// A single permission declaration with its UI context.

@@ -11,6 +11,7 @@ class EntityChipConfig {
 
   final IconData icon;
   final Color color;
+
   /// Builds a route path from the entity ID. Null means non-navigable.
   final String Function(String id)? routeBuilder;
 }
@@ -41,8 +42,10 @@ class EntityChip extends StatelessWidget {
 
   final EntityChipConfig config;
   final String id;
+
   /// Display label. Falls back to truncated ID if not provided.
   final String? label;
+
   /// Custom tap handler. If null and config.routeBuilder is set, navigates.
   final VoidCallback? onTap;
 
@@ -51,13 +54,14 @@ class EntityChip extends StatelessWidget {
     if (id.isEmpty) return const SizedBox.shrink();
 
     final theme = Theme.of(context);
-    final displayLabel = label ?? (id.length > 12 ? '${id.substring(0, 12)}...' : id);
+    final displayLabel =
+        label ?? (id.length > 12 ? '${id.substring(0, 12)}...' : id);
     final color = config.color;
 
     return InkWell(
-      onTap: onTap ?? (config.routeBuilder != null
-          ? () => _navigate(context)
-          : null),
+      onTap:
+          onTap ??
+          (config.routeBuilder != null ? () => _navigate(context) : null),
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

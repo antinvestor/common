@@ -1,62 +1,231 @@
-# Reusable workflow: Flutter CI (analyze + test)
-# Automatically skips if ui/ directory doesn't exist.
+# Reusable workflow: Dart/Flutter CI for every package in the repository.
+#
+# Jobs:
+#   discover  finds the packages (pubspec.yaml) and emits a JSON matrix.
+#   package   one job per package: pub get, build_runner, publish dry-run,
+#             format, analyze and test. A failing gate fails the job.
+#   check     the aggregate result. Rulesets that require "flutter / check"
+#             therefore gate on every package job, not on discovery alone.
+#
+# Discovered layouts: sdk/dart/*, ui, ui/*, ui_*, packages/*, plus the
+# ui_dir input when it points elsewhere.
+#
+# A package whose pubspec has a path dependency outside the repository is
+# skipped (and listed in the job summary) unless allow_cross_repo is true.
+# Then the repository is checked out next to the sibling_repos it names, so
+# relative paths such as ../../../common/ui_core resolve as they do locally.
+#
+# soft_fail: true keeps the package jobs visible (red) but lets the workflow
+# pass. It exists for repositories with known pre-existing failures and must
+# be opted into explicitly; the default is false.
 name: Flutter CI
 on:
   workflow_call:
     inputs:
       ui_dir:
-        description: "Flutter UI directory"
+        description: "Extra package directory to include (the default 'ui' is always discovered)"
         required: false
         default: "ui"
         type: string
       flutter_version:
-        description: "Flutter version"
+        description: "Flutter channel (stable, beta, master) or an exact version such as 3.47.7"
         required: false
         default: "stable"
         type: string
+      soft_fail:
+        description: "Report package failures without failing the workflow (explicit opt-in)"
+        required: false
+        default: false
+        type: boolean
+      exclude:
+        description: "Space-separated package directories to skip (listed in the summary)"
+        required: false
+        default: ""
+        type: string
+      allow_cross_repo:
+        description: "Build packages with path dependencies outside the repository"
+        required: false
+        default: false
+        type: boolean
+      sibling_repos:
+        description: "Space-separated owner/repo list checked out next to this repository when allow_cross_repo is true"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
 
 jobs:
-  check:
+  discover:
     runs-on: ubuntu-latest
     outputs:
-      has_ui: ${{ steps.detect.outputs.has_ui }}
+      matrix: ${{ steps.find.outputs.matrix }}
+      count: ${{ steps.find.outputs.count }}
     steps:
       - uses: actions/checkout@v6
-      - id: detect
-        run: |
-          if [ -f "${{ inputs.ui_dir }}/pubspec.yaml" ]; then
-            echo "has_ui=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_ui=false" >> $GITHUB_OUTPUT
-          fi
 
-  flutter:
-    needs: check
-    if: needs.check.outputs.has_ui == 'true'
+      - id: find
+        env:
+          UI_DIR: ${{ inputs.ui_dir }}
+          EXCLUDE: ${{ inputs.exclude }}
+          ALLOW_CROSS_REPO: ${{ inputs.allow_cross_repo }}
+        shell: python3 {0}
+        run: |
+          import glob, json, os, re
+
+          root = os.path.realpath(".")
+          patterns = ["sdk/dart/*", "ui", "ui/*", "ui_*", "packages/*"]
+          if os.environ["UI_DIR"]:
+              patterns.append(os.environ["UI_DIR"].strip("/"))
+          excluded = set(d.strip("/") for d in os.environ["EXCLUDE"].split())
+          allow_cross = os.environ["ALLOW_CROSS_REPO"] == "true"
+
+          dirs = set()
+          for pattern in patterns:
+              for pubspec in glob.glob(os.path.join(pattern, "pubspec.yaml")):
+                  dirs.add(os.path.normpath(os.path.dirname(pubspec)))
+
+          packages, skipped = [], []
+          for d in sorted(dirs):
+              if d in excluded:
+                  skipped.append((d, "excluded by input"))
+                  continue
+              text = open(os.path.join(d, "pubspec.yaml")).read()
+              external = []
+              for m in re.finditer(r"^\s*path:\s*['\"]?([^'\"#\s]+)", text, re.M):
+                  target = os.path.realpath(os.path.join(d, m.group(1)))
+                  if target != root and not target.startswith(root + os.sep):
+                      external.append(m.group(1))
+              if external and not allow_cross:
+                  skipped.append((d, "path dependency outside the repository: " + ", ".join(external)))
+                  continue
+              packages.append({
+                  "dir": d,
+                  "flutter": bool(re.search(r"^\s*sdk:\s*flutter\s*$", text, re.M)),
+                  "publish": not re.search(r"^publish_to:\s*['\"]?none", text, re.M),
+                  "build_runner": "build_runner" in text,
+                  "tests": os.path.isdir(os.path.join(d, "test")),
+              })
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write("matrix=" + json.dumps({"package": packages}) + "\n")
+              out.write("count=%d\n" % len(packages))
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as s:
+              s.write("### Dart/Flutter packages\n\n")
+              for p in packages:
+                  s.write("- `%s` (%s%s)\n" % (p["dir"], "flutter" if p["flutter"] else "dart",
+                                              "" if p["tests"] else ", no test/"))
+              if not packages:
+                  s.write("None found.\n")
+              if skipped:
+                  s.write("\n### Skipped\n\n")
+                  for d, why in skipped:
+                      s.write("- `%s`: %s\n" % (d, why))
+          for d, why in skipped:
+              print("::warning::Skipping %s: %s" % (d, why))
+
+  package:
+    needs: discover
+    if: needs.discover.outputs.count != '0'
+    name: ${{ matrix.package.dir }}
     runs-on: ubuntu-latest
+    continue-on-error: ${{ inputs.soft_fail }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
+    defaults:
+      run:
+        working-directory: ${{ github.event.repository.name }}/${{ matrix.package.dir }}
+    env:
+      PUB: ${{ matrix.package.flutter && 'flutter' || 'dart' }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          path: ${{ github.event.repository.name }}
+
+      - name: Check out sibling repositories
+        if: inputs.allow_cross_repo && inputs.sibling_repos != ''
+        working-directory: .
+        env:
+          SIBLINGS: ${{ inputs.sibling_repos }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for repo in $SIBLINGS; do
+            gh repo clone "$repo" "${repo#*/}" -- --depth 1
+          done
 
       - uses: subosito/flutter-action@v2
         with:
-          channel: ${{ inputs.flutter_version }}
+          channel: ${{ contains(fromJSON('["stable","beta","master","main"]'), inputs.flutter_version) && inputs.flutter_version || 'stable' }}
+          flutter-version: ${{ !contains(fromJSON('["stable","beta","master","main"]'), inputs.flutter_version) && inputs.flutter_version || '' }}
           cache: true
 
-      - name: Install dependencies
-        working-directory: ${{ inputs.ui_dir }}
-        run: flutter pub get
+      - name: Dependencies
+        id: deps
+        run: $PUB pub get
 
       - name: Generate code
-        working-directory: ${{ inputs.ui_dir }}
+        id: gen
+        if: matrix.package.build_runner
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      # Later gates run even when an earlier one failed, so one run reports
+      # every problem with the package.
+      # Flutter 3.47's pub get migrates analysis_options.yaml (it adds an
+      # analyzer exclude for build/), and pub publish warns about any modified
+      # checked-in file. That rewrite is the tool's, not the package's, so it
+      # is reverted before the dry-run; every other modification still fails.
+      - name: Publish dry-run
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' && matrix.package.publish }}
         run: |
-          if grep -q 'build_runner' pubspec.yaml; then
-            dart run build_runner build --delete-conflicting-outputs
+          if [ -f analysis_options.yaml ] && ! git diff --quiet -- analysis_options.yaml; then
+            echo "::notice::flutter rewrote analysis_options.yaml; reverting it for the dry-run"
+            git checkout -- analysis_options.yaml
           fi
+          $PUB pub publish --dry-run
+
+      - name: Format
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: |
+          dirs=""
+          for d in lib test bin; do [ -d "$d" ] && dirs="$dirs $d"; done
+          [ -n "$dirs" ] || exit 0
+          files=$(find $dirs -name '*.dart' \
+            ! -name '*.pb.dart' ! -name '*.pbenum.dart' ! -name '*.pbjson.dart' \
+            ! -name '*.pbserver.dart' ! -name '*.pbgrpc.dart' ! -name '*.connect.*.dart' \
+            ! -name '*.g.dart' ! -name '*.freezed.dart' ! -name '*.gr.dart' ! -name '*.mocks.dart')
+          [ -n "$files" ] || exit 0
+          echo "$files" | xargs dart format --output=none --set-exit-if-changed
 
       - name: Analyze
-        working-directory: ${{ inputs.ui_dir }}
-        run: flutter analyze --no-fatal-infos
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: |
+          if [ "$PUB" = flutter ]; then
+            flutter analyze --no-fatal-infos
+          else
+            dart analyze --fatal-warnings
+          fi
 
       - name: Test
-        working-directory: ${{ inputs.ui_dir }}
-        run: flutter test || true
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' && matrix.package.tests }}
+        run: $PUB test
+
+  check:
+    needs: [discover, package]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Result
+        env:
+          DISCOVER: ${{ needs.discover.result }}
+          PACKAGES: ${{ needs.package.result }}
+          SOFT_FAIL: ${{ inputs.soft_fail }}
+        run: |
+          echo "discover=$DISCOVER package=$PACKAGES soft_fail=$SOFT_FAIL"
+          [ "$DISCOVER" = success ] || exit 1
+          case "$PACKAGES" in
+            success|skipped) ;;
+            *) exit 1 ;;
+          esac

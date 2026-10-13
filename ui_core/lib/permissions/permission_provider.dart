@@ -14,16 +14,20 @@ final hasPermissionProvider = Provider.family<bool, String>((ref, permission) {
 });
 
 /// Check if user has ANY of the given permissions.
-final hasAnyPermissionProvider =
-    Provider.family<bool, Set<String>>((ref, required) {
+final hasAnyPermissionProvider = Provider.family<bool, Set<String>>((
+  ref,
+  required,
+) {
   if (required.isEmpty) return true; // No permissions required = allow all
   final permissions = ref.watch(userPermissionsProvider).value ?? {};
   return permissions.intersection(required).isNotEmpty;
 });
 
 /// Check if user has ALL of the given permissions.
-final hasAllPermissionsProvider =
-    Provider.family<bool, Set<String>>((ref, required) {
+final hasAllPermissionsProvider = Provider.family<bool, Set<String>>((
+  ref,
+  required,
+) {
   if (required.isEmpty) return true;
   final permissions = ref.watch(userPermissionsProvider).value ?? {};
   return required.every(permissions.contains);

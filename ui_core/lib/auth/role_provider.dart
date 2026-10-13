@@ -22,9 +22,10 @@ final currentUserRolesProvider = FutureProvider<Set<String>>((ref) async {
 });
 
 /// Check if user has any of the specified roles.
-final hasAnyRoleProvider = FutureProvider.family<bool, Set<String>>(
-  (ref, requiredRoles) async {
-    final roles = await ref.watch(currentUserRolesProvider.future);
-    return requiredRoles.isEmpty || roles.intersection(requiredRoles).isNotEmpty;
-  },
-);
+final hasAnyRoleProvider = FutureProvider.family<bool, Set<String>>((
+  ref,
+  requiredRoles,
+) async {
+  final roles = await ref.watch(currentUserRolesProvider.future);
+  return requiredRoles.isEmpty || roles.intersection(requiredRoles).isNotEmpty;
+});

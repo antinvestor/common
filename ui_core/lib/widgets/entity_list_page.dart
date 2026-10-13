@@ -124,7 +124,9 @@ class EntityListPage<T> extends StatelessWidget {
           child: Align(
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: _maxContentWidth + 48),
+              constraints: const BoxConstraints(
+                maxWidth: _maxContentWidth + 48,
+              ),
               child: _buildContent(context, theme),
             ),
           ),
