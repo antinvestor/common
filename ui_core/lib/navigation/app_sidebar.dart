@@ -73,10 +73,7 @@ class AppSidebar extends ConsumerWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         border: Border(
-          right: BorderSide(
-            color: Theme.of(context).dividerColor,
-            width: 1,
-          ),
+          right: BorderSide(color: Theme.of(context).dividerColor, width: 1),
         ),
       ),
       child: Column(
@@ -93,12 +90,8 @@ class AppSidebar extends ConsumerWidget {
                 onNavigate: onNavigate,
                 isDrawer: isDrawer,
               ),
-              loading: () => const Center(
-                child: CircularProgressIndicator(),
-              ),
-              error: (e, _) => Center(
-                child: Text('Error loading nav: $e'),
-              ),
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text('Error loading nav: $e')),
             ),
           ),
           const Divider(height: 1),
@@ -286,8 +279,7 @@ class _LeafTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isActive =
-        item.route != null && currentRoute.startsWith(item.route!);
+    final isActive = item.route != null && currentRoute.startsWith(item.route!);
     final theme = Theme.of(context);
 
     return ListTile(
@@ -359,9 +351,7 @@ class _UserFooter extends ConsumerWidget {
                 radius: 16,
                 backgroundColor: theme.colorScheme.primaryContainer,
                 child: Text(
-                  displayName.isNotEmpty
-                      ? displayName[0].toUpperCase()
-                      : '?',
+                  displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
                   style: TextStyle(
                     color: theme.colorScheme.onPrimaryContainer,
                     fontWeight: FontWeight.w600,
@@ -385,8 +375,9 @@ class _UserFooter extends ConsumerWidget {
                       Text(
                         profileId,
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface
-                              .withValues(alpha: 0.5),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.5,
+                          ),
                           fontSize: 11,
                         ),
                         overflow: TextOverflow.ellipsis,

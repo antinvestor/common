@@ -26,8 +26,9 @@ class Breadcrumb extends StatelessWidget {
             items[i],
             style: theme.textTheme.bodySmall?.copyWith(
               color: i == items.length - 1 ? activeColor : mutedColor,
-              fontWeight:
-                  i == items.length - 1 ? FontWeight.w500 : FontWeight.w400,
+              fontWeight: i == items.length - 1
+                  ? FontWeight.w500
+                  : FontWeight.w400,
             ),
           ),
         ],

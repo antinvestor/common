@@ -50,7 +50,7 @@ typedef TokenSetter = void Function(String newToken);
 /// );
 /// ```
 AnyFn<I, O> Function<I extends Object, O extends Object>(AnyFn<I, O> next)
-    createTokenRefreshInterceptor({
+createTokenRefreshInterceptor({
   required TokenGetter getAccessToken,
   required RefreshTokenGetter getRefreshToken,
   required TokenSetter setAccessToken,
@@ -153,10 +153,7 @@ Future<String> _performRefresh(
   final currentRefreshToken = getRefreshToken();
 
   if (currentRefreshToken == null) {
-    throw ConnectException(
-      Code.unauthenticated,
-      'No refresh token available',
-    );
+    throw ConnectException(Code.unauthenticated, 'No refresh token available');
   }
 
   try {

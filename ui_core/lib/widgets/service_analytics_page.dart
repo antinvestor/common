@@ -128,10 +128,12 @@ class ServiceAnalyticsPage extends StatelessWidget {
     }
     return Column(
       children: kpis
-          .map((kpi) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _KpiCard(kpi: kpi),
-              ))
+          .map(
+            (kpi) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _KpiCard(kpi: kpi),
+            ),
+          )
           .toList(),
     );
   }
@@ -153,14 +155,18 @@ class ServiceAnalyticsPage extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (chartTitle != null)
-            Text(chartTitle!,
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w600)),
+            Text(
+              chartTitle!,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           if (chartSubtitle != null) ...[
             const SizedBox(height: 4),
-            Text(chartSubtitle!,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: mutedColor)),
+            Text(
+              chartSubtitle!,
+              style: theme.textTheme.bodySmall?.copyWith(color: mutedColor),
+            ),
           ],
           if (chartTitle != null || chartSubtitle != null)
             const SizedBox(height: 16),
@@ -170,8 +176,10 @@ class ServiceAnalyticsPage extends StatelessWidget {
             SizedBox(
               height: 240,
               child: Center(
-                child: Text('Chart placeholder',
-                    style: TextStyle(color: mutedColor)),
+                child: Text(
+                  'Chart placeholder',
+                  style: TextStyle(color: mutedColor),
+                ),
               ),
             ),
         ],
@@ -195,16 +203,21 @@ class ServiceAnalyticsPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Recent Events',
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w600)),
+          Text(
+            'Recent Events',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 16),
           if (events.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 24),
               child: Center(
-                child: Text('No recent events',
-                    style: TextStyle(color: mutedColor)),
+                child: Text(
+                  'No recent events',
+                  style: TextStyle(color: mutedColor),
+                ),
               ),
             )
           else
@@ -264,7 +277,9 @@ class _KpiCard extends StatelessWidget {
                 Flexible(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: changeColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(6),
@@ -286,8 +301,9 @@ class _KpiCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             kpi.value,
-            style: theme.textTheme.headlineMedium
-                ?.copyWith(fontWeight: FontWeight.w700),
+            style: theme.textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
@@ -311,8 +327,10 @@ class _EventTile extends StatelessWidget {
       EventSeverity.info => (theme.colorScheme.primary, Icons.info_outline),
       EventSeverity.warning => (Colors.orange.shade600, Icons.warning_amber),
       EventSeverity.error => (theme.colorScheme.error, Icons.error_outline),
-      EventSeverity.success =>
-        (Colors.green.shade600, Icons.check_circle_outline),
+      EventSeverity.success => (
+        Colors.green.shade600,
+        Icons.check_circle_outline,
+      ),
     };
 
     return Padding(
@@ -332,12 +350,18 @@ class _EventTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(event.title,
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(fontWeight: FontWeight.w500)),
-                Text(event.timeAgo,
-                    style: theme.textTheme.labelSmall
-                        ?.copyWith(color: mutedColor)),
+                Text(
+                  event.title,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  event.timeAgo,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: mutedColor,
+                  ),
+                ),
               ],
             ),
           ),

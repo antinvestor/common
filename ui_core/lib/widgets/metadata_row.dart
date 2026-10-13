@@ -20,9 +20,9 @@ class MetadataRow extends StatelessWidget {
     this.copiable = false,
     this.padding = const EdgeInsets.only(bottom: 8),
   }) : assert(
-          value != null || valueWidget != null,
-          'Either value or valueWidget must be provided',
-        );
+         value != null || valueWidget != null,
+         'Either value or valueWidget must be provided',
+       );
 
   final String label;
 
@@ -66,7 +66,8 @@ class MetadataRow extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: valueWidget ??
+            child:
+                valueWidget ??
                 Text(
                   value!,
                   style: theme.textTheme.bodyMedium?.copyWith(
