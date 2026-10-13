@@ -55,5 +55,3 @@ require (
 	google.golang.org/grpc v1.84.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/antinvestor/common/v3 => ../
