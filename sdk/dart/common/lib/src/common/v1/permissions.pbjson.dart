@@ -1,13 +1,15 @@
+// This is a generated file - do not edit.
 //
-//  Generated code. Do not modify.
-//  source: common/v1/permissions.proto
-//
-// @dart = 2.12
+// Generated from common/v1/permissions.proto.
+
+// @dart = 3.3
 
 // ignore_for_file: annotate_overrides, camel_case_types, comment_references
-// ignore_for_file: constant_identifier_names, library_prefixes
-// ignore_for_file: non_constant_identifier_names, prefer_final_fields
-// ignore_for_file: unnecessary_import, unnecessary_this, unused_import
+// ignore_for_file: constant_identifier_names
+// ignore_for_file: curly_braces_in_flow_control_structures
+// ignore_for_file: deprecated_member_use_from_same_package, library_prefixes
+// ignore_for_file: non_constant_identifier_names, prefer_relative_imports
+// ignore_for_file: unused_import
 
 import 'dart:convert' as $convert;
 import 'dart:core' as $core;
@@ -37,7 +39,14 @@ final $typed_data.Uint8List standardRoleDescriptor = $convert.base64Decode(
 const RoleBinding$json = {
   '1': 'RoleBinding',
   '2': [
-    {'1': 'role', '3': 1, '4': 1, '5': 14, '6': '.common.v1.StandardRole', '10': 'role'},
+    {
+      '1': 'role',
+      '3': 1,
+      '4': 1,
+      '5': 14,
+      '6': '.common.v1.StandardRole',
+      '10': 'role'
+    },
     {'1': 'permissions', '3': 2, '4': 3, '5': 9, '10': 'permissions'},
   ],
 };
@@ -52,7 +61,13 @@ const MethodPermissions$json = {
   '1': 'MethodPermissions',
   '2': [
     {'1': 'permissions', '3': 1, '4': 3, '5': 9, '10': 'permissions'},
-    {'1': 'allow_unauthenticated', '3': 2, '4': 1, '5': 8, '10': 'allowUnauthenticated'},
+    {
+      '1': 'allow_unauthenticated',
+      '3': 2,
+      '4': 1,
+      '5': 8,
+      '10': 'allowUnauthenticated'
+    },
   ],
 };
 
@@ -67,7 +82,14 @@ const ServicePermissions$json = {
   '2': [
     {'1': 'namespace', '3': 1, '4': 1, '5': 9, '10': 'namespace'},
     {'1': 'permissions', '3': 2, '4': 3, '5': 9, '10': 'permissions'},
-    {'1': 'role_bindings', '3': 3, '4': 3, '5': 11, '6': '.common.v1.RoleBinding', '10': 'roleBindings'},
+    {
+      '1': 'role_bindings',
+      '3': 3,
+      '4': 3,
+      '5': 11,
+      '6': '.common.v1.RoleBinding',
+      '10': 'roleBindings'
+    },
   ],
 };
 
@@ -76,4 +98,3 @@ final $typed_data.Uint8List servicePermissionsDescriptor = $convert.base64Decode
     'ChJTZXJ2aWNlUGVybWlzc2lvbnMSHAoJbmFtZXNwYWNlGAEgASgJUgluYW1lc3BhY2USIAoLcG'
     'VybWlzc2lvbnMYAiADKAlSC3Blcm1pc3Npb25zEjsKDXJvbGVfYmluZGluZ3MYAyADKAsyFi5j'
     'b21tb24udjEuUm9sZUJpbmRpbmdSDHJvbGVCaW5kaW5ncw==');
-

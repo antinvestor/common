@@ -4,7 +4,11 @@ managed:
 
 plugins:
   # Dart protobuf generation
-  - remote: buf.build/protocolbuffers/dart:v21.1.2
+  - remote: buf.build/protocolbuffers/dart:v25.1.0
     out: ../sdk/dart/common/lib/src
     include_imports: true
+    # include_wkt keeps google/protobuf/descriptor.proto output, which the
+    # buf.validate and gnostic code imports. protoc_plugin 25 imports the other
+    # well-known types from package:protobuf, so after generating delete
+    # lib/src/google/protobuf/{any,duration,field_mask,struct,timestamp}.*
     include_wkt: true

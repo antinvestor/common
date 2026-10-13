@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.0.0] - 2026-10-13
+
+### Changed (breaking)
+
+- Regenerated with protoc_plugin 25.1 (`buf.build/protocolbuffers/dart:v25.1.0`)
+  / connect-dart 2.0; requires `protobuf ^6.1.0`, `connectrpc ^2.0.0`,
+  `fixnum ^1.1.1`, Dart `^3.7.0`.
+- Well-known types now come from `package:protobuf/well_known_types/...`.
+  The barrel re-exports the runtime `Any`, `Duration`, `Struct` and
+  `Timestamp`; the vendored `lib/src/google/protobuf/{any,duration,
+  field_mask,struct,timestamp}` copies are gone.
+- Empty `*.pbserver.dart` files are no longer generated or exported.
+
+### Removed
+
+- `google.type.Interval` and `google.type.Money` re-exports. No
+  `antinvestor.common` proto imports them any more, so they are no longer
+  generated. Use `common.v1.Money`.
+
 ## [1.53.1] - 2026-05-10
 
 ### Fixed

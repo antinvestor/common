@@ -21,9 +21,8 @@ import '../auth/token_refresh_interceptor.dart';
 typedef ServiceClientFactory<T> = T Function(Transport transport);
 
 /// Type definition for a function that creates a transport.
-typedef TransportFactory = Transport Function(
-    Uri baseUrl, List<Interceptor> interceptors,
-);
+typedef TransportFactory =
+    Transport Function(Uri baseUrl, List<Interceptor> interceptors);
 
 /// Configuration options for creating a client.
 ///
