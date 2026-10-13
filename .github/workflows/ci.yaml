@@ -36,3 +36,11 @@ jobs:
           go-version-file: go.mod
       - run: cd tools/inject-permissions && go build .
       - run: cd tools/generate-opl && go build .
+
+  # Exercises the reusable Flutter CI on this repository's own packages
+  # (sdk/dart/common, ui_core), so changes to it are tested before callers
+  # pick them up from @main.
+  flutter:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/flutter-ci.yml

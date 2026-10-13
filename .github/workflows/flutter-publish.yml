@@ -1,0 +1,110 @@
+# Reusable workflow: publish a Flutter package to pub.dev with OIDC.
+#
+# dart-lang/setup-dart's publish.yml cannot publish Flutter packages (it has
+# no Flutter SDK), so this workflow installs both: setup-dart registers the
+# pub.dev OIDC token, then the Flutter SDK publishes with it.
+#
+# Caller (in the package repository):
+#
+#   on:
+#     push:
+#       tags: ['ui/*/v[0-9]+.[0-9]+.[0-9]+*']
+#     workflow_dispatch:
+#   jobs:
+#     publish:
+#       permissions:
+#         contents: read
+#         id-token: write
+#       uses: antinvestor/common/.github/workflows/flutter-publish.yml@main
+#
+# The tag is ui/<name>/v<version>. <name> resolves to the first directory
+# that holds a pubspec.yaml: the dir_map entry, ui_<name>, ui/<name>, then
+# ui (single-UI repositories). The pubspec version must equal <version>.
+#
+# pub.dev must list this repository under the package's automated
+# publishing settings with the tag pattern ui/<name>/v{{version}}; tick
+# "publishing from workflow_dispatch events" when tags are dispatched by
+# another workflow (auto-tag) instead of pushed.
+name: Publish Flutter package to pub.dev
+on:
+  workflow_call:
+    inputs:
+      flutter_version:
+        description: "Flutter channel (stable, beta, master) or an exact version"
+        required: false
+        default: "stable"
+        type: string
+      dir_map:
+        description: "Space-separated name=dir overrides, e.g. 'core=ui_core'"
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      working_dir: ${{ steps.extract.outputs.working_dir }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: extract
+        env:
+          REF: ${{ github.ref }}
+          DIR_MAP: ${{ inputs.dir_map }}
+        run: |
+          case "$REF" in
+            refs/tags/ui/*/v*) ;;
+            *) echo "::error::$REF is not a ui/<name>/v<version> tag"; exit 1 ;;
+          esac
+          TAG="${REF#refs/tags/}"
+          NAME=$(echo "$TAG" | cut -d/ -f2)
+          VERSION="${TAG##*/v}"
+
+          DIR=""
+          for pair in $DIR_MAP; do
+            [ "${pair%%=*}" = "$NAME" ] && DIR="${pair#*=}"
+          done
+          if [ -z "$DIR" ]; then
+            for candidate in "ui_$NAME" "ui/$NAME" "ui"; do
+              if [ -f "$candidate/pubspec.yaml" ]; then DIR="$candidate"; break; fi
+            done
+          fi
+          if [ -z "$DIR" ] || [ ! -f "$DIR/pubspec.yaml" ]; then
+            echo "::error::No pubspec.yaml for $NAME (tag $TAG)"; exit 1
+          fi
+
+          PUBSPEC_VERSION=$(sed -n 's/^version:[[:space:]]*//p' "$DIR/pubspec.yaml" | tr -d "\"' ")
+          if [ "$PUBSPEC_VERSION" != "$VERSION" ]; then
+            echo "::error::$DIR/pubspec.yaml is $PUBSPEC_VERSION but the tag is $VERSION"; exit 1
+          fi
+
+          echo "working_dir=$DIR" >> "$GITHUB_OUTPUT"
+          echo "Publishing $DIR $VERSION (tag $TAG)"
+
+  publish:
+    needs: resolve
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: ${{ needs.resolve.outputs.working_dir }}
+    steps:
+      - uses: actions/checkout@v6
+
+      # Registers the pub.dev OIDC token (PUB_TOKEN) in the user-level dart
+      # config, which the Flutter SDK's pub reads as well.
+      - uses: dart-lang/setup-dart@v1
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ contains(fromJSON('["stable","beta","master","main"]'), inputs.flutter_version) && inputs.flutter_version || 'stable' }}
+          flutter-version: ${{ !contains(fromJSON('["stable","beta","master","main"]'), inputs.flutter_version) && inputs.flutter_version || '' }}
+          cache: true
+
+      - run: flutter pub get
+      - run: flutter pub publish --dry-run
+      - run: flutter pub publish --force

@@ -1,0 +1,14 @@
+name: Publish Flutter UI to pub.dev
+on:
+  push:
+    tags:
+      - 'ui/*/v[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    permissions:
+      contents: read
+      id-token: write
+    # Tag ui/core/v<version> publishes ui_core (antinvestor_ui_core).
+    uses: ./.github/workflows/flutter-publish.yml
