@@ -18,9 +18,8 @@ import (
 	"context"
 	"fmt"
 
-	auditv1connect "buf.build/gen/go/antinvestor/audit/connectrpc/go/audit/v1/auditv1connect"
+	auditv1connect "buf.build/gen/go/antinvestor/audit/connectrpc/go/v2/audit/v1/auditv1connect"
 	auditv1 "buf.build/gen/go/antinvestor/audit/protocolbuffers/go/audit/v1"
-	"connectrpc.com/connect"
 	"github.com/pitabwire/util"
 )
 
@@ -66,11 +65,11 @@ func NewManifest(service string, actions, resourceTypes []string, opts ...Manife
 // setup Job next to permission registration; an unchanged manifest is a
 // no-op on the audit side.
 func RegisterManifest(ctx context.Context, client auditv1connect.AuditServiceClient, req *auditv1.RegisterAuditManifestRequest) error {
-	resp, err := client.RegisterAuditManifest(ctx, connect.NewRequest(req))
+	resp, err := client.RegisterAuditManifest(ctx, req)
 	if err != nil {
 		return fmt.Errorf("register audit manifest for %q: %w", req.GetManifest().GetService(), err)
 	}
-	util.Log(ctx).WithField("service", resp.Msg.GetService()).WithField("version", resp.Msg.GetVersion()).
-		WithField("unchanged", resp.Msg.GetUnchanged()).Info("audit manifest registered")
+	util.Log(ctx).WithField("service", resp.GetService()).WithField("version", resp.GetVersion()).
+		WithField("unchanged", resp.GetUnchanged()).Info("audit manifest registered")
 	return nil
 }

@@ -21,9 +21,8 @@ import (
 	"strings"
 	"text/template"
 
-	"buf.build/gen/go/antinvestor/notification/connectrpc/go/notification/v1/notificationv1connect"
+	"buf.build/gen/go/antinvestor/notification/connectrpc/go/v2/notification/v1/notificationv1connect"
 	notificationv1 "buf.build/gen/go/antinvestor/notification/protocolbuffers/go/notification/v1"
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -85,7 +84,7 @@ func (t Template) Long() string { return t.Bodies[ChannelEmail] }
 
 // Saver is the slice of the notification client Sync needs.
 type Saver interface {
-	TemplateSave(ctx context.Context, req *connect.Request[notificationv1.TemplateSaveRequest]) (*connect.Response[notificationv1.TemplateSaveResponse], error)
+	TemplateSave(ctx context.Context, req *notificationv1.TemplateSaveRequest) (*notificationv1.TemplateSaveResponse, error)
 }
 
 // LanguageOrDefault returns the template language, or DefaultLanguage.
@@ -197,7 +196,7 @@ func Sync(ctx context.Context, cli Saver, owner string, templates []Template) (i
 		if err != nil {
 			return i, err
 		}
-		if _, err := cli.TemplateSave(ctx, connect.NewRequest(req)); err != nil {
+		if _, err := cli.TemplateSave(ctx, req); err != nil {
 			return i, fmt.Errorf("register template %s: %w", t.Name, err)
 		}
 	}

@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"sync"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"golang.org/x/oauth2"
 	"golang.org/x/sync/singleflight"
 )
@@ -33,16 +33,20 @@ type authInterceptor struct {
 	apiKey      string             // An api key that never changes for a legacy api
 	mu          sync.Mutex
 	sf          singleflight.Group
-	tokenErr    error
 }
 
-func NewAuthInterceptor(opts ...AuthInterceptorOption) connect.Interceptor {
+// NewAuthInterceptor returns a client interceptor that sets the
+// Authorization header on every outbound RPC, unary and streaming alike.
+// The bearer token comes from the configured token source (refreshed once
+// per expiry, shared across concurrent calls) or, failing that, the API key.
+// A token-source failure aborts the RPC with CodeUnauthenticated.
+func NewAuthInterceptor(opts ...AuthInterceptorOption) connect.ClientInterceptor {
 	a := &authInterceptor{}
 	for _, opt := range opts {
 		opt(a)
 	}
 
-	return a
+	return a.intercept
 }
 
 // WithTokenSource sets the OAuth2 client credentials config.
@@ -60,7 +64,7 @@ func WithAPIKey(key string) AuthInterceptorOption {
 }
 
 func (ai *authInterceptor) getTokenStr(_ context.Context) (string, error) {
-	if ai.tokenSource == nil && ai.apiKey != "" {
+	if ai.tokenSource == nil {
 		return ai.apiKey, nil
 	}
 
@@ -72,7 +76,7 @@ func (ai *authInterceptor) getTokenStr(_ context.Context) (string, error) {
 	}
 	ai.mu.Unlock()
 
-	v, err, _ := ai.sf.Do("refresh", func() (interface{}, error) {
+	v, err, _ := ai.sf.Do("refresh", func() (any, error) {
 		tok, err := ai.tokenSource.Token()
 		if err != nil {
 			return "", err
@@ -93,58 +97,19 @@ func (ai *authInterceptor) getTokenStr(_ context.Context) (string, error) {
 	return "", fmt.Errorf("unexpected token type: %T", v)
 }
 
-func (ai *authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	// Same as previous UnaryInterceptorFunc.
-	return func(
-		ctx context.Context,
-		req connect.AnyRequest,
-	) (connect.AnyResponse, error) {
-		if req.Spec().IsClient {
-			tokenStr, err := ai.getTokenStr(ctx)
-			if err != nil {
-				return nil, connect.NewError(connect.CodeUnauthenticated, err)
-			}
-
-			if tokenStr != "" {
-				// Create a new context with the token and make the first request
-				req.Header().Set(authTokenHeader, "Bearer "+tokenStr)
-			}
-		}
-		return next(ctx, req)
-	}
-}
-
-func (ai *authInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return func(
-		ctx context.Context,
-		spec connect.Spec,
-	) connect.StreamingClientConn {
-		conn := next(ctx, spec)
-
+func (ai *authInterceptor) intercept(next connect.ClientFunc) connect.ClientFunc {
+	return func(ctx context.Context, spec connect.Spec) (connect.ClientStream, error) {
 		tokenStr, err := ai.getTokenStr(ctx)
 		if err != nil {
-			conn.RequestHeader().Set(authTokenHeader, "")
-			return conn
+			return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 		}
 
 		if tokenStr != "" {
-			// Create a new context with the token and make the first request
-			conn.RequestHeader().Set(authTokenHeader, "Bearer "+tokenStr)
+			if info, ok := connect.CallInfoForClientContext(ctx); ok {
+				info.RequestHeader().Set(authTokenHeader, "Bearer "+tokenStr)
+			}
 		}
 
-		return conn
-	}
-}
-
-func (ai *authInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(
-		ctx context.Context,
-		conn connect.StreamingHandlerConn,
-	) error {
-		if ai.tokenErr != nil && conn.RequestHeader().Get(authTokenHeader) == "" {
-			return connect.NewError(connect.CodeUnauthenticated, ai.tokenErr)
-		}
-
-		return next(ctx, conn)
+		return next(ctx, spec)
 	}
 }

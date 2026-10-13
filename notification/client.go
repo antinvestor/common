@@ -17,14 +17,14 @@ package notification
 import (
 	"context"
 	"errors"
+	"io"
 
-	"buf.build/gen/go/antinvestor/notification/connectrpc/go/notification/v1/notificationv1connect"
+	"buf.build/gen/go/antinvestor/notification/connectrpc/go/v2/notification/v1/notificationv1connect"
 	notificationv1 "buf.build/gen/go/antinvestor/notification/protocolbuffers/go/notification/v1"
-	"connectrpc.com/connect"
 
-	common "github.com/antinvestor/common/v2"
-	"github.com/antinvestor/common/v2/connection"
-	"github.com/antinvestor/common/v2/servicecatalog"
+	common "github.com/antinvestor/common/v3"
+	"github.com/antinvestor/common/v3/connection"
+	"github.com/antinvestor/common/v3/servicecatalog"
 )
 
 // ErrDisabled is returned by NewClient when the target has no endpoint: the
@@ -80,15 +80,17 @@ func NewSender(cli notificationv1connect.NotificationServiceClient) *ConnectSend
 // Send submits one notification and drains the status stream; the first
 // stream error is returned.
 func (s *ConnectSender) Send(ctx context.Context, n *notificationv1.Notification) error {
-	stream, err := s.cli.Send(ctx, connect.NewRequest(notificationv1.SendRequest_builder{Data: []*notificationv1.Notification{n}}.Build()))
+	stream, err := s.cli.Send(ctx, notificationv1.SendRequest_builder{Data: []*notificationv1.Notification{n}}.Build())
 	if err != nil {
 		return err
 	}
-	for stream.Receive() {
+	defer func() { _ = stream.Close() }()
+	for {
+		if _, err := stream.Receive(); err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return err
+		}
 	}
-	if err := stream.Err(); err != nil {
-		_ = stream.Close()
-		return err
-	}
-	return stream.Close()
 }

@@ -22,8 +22,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/antinvestor/common/v2/connection/options"
-	"github.com/antinvestor/common/v2/servicecatalog"
+	"github.com/antinvestor/common/v3/connection/options"
+	"github.com/antinvestor/common/v3/servicecatalog"
 )
 
 const (

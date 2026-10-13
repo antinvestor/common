@@ -20,7 +20,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/antinvestor/common/v2"
+	"github.com/antinvestor/common/v3"
 )
 
 // sizeEstimateMultiplier is a heuristic multiplier for estimating buffer size.

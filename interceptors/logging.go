@@ -16,13 +16,16 @@ package interceptors
 
 import (
 	"context"
+	"errors"
+	"io"
+	"sync"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/pitabwire/util"
 )
 
-// LoggingInterceptorOption configures the logging interceptor.
+// LoggingInterceptorOption configures the logging interceptors.
 type LoggingInterceptorOption func(*loggingInterceptor)
 
 // loggingInterceptor logs requests and responses.
@@ -33,9 +36,7 @@ type loggingInterceptor struct {
 	logHeaders   bool
 }
 
-// NewLoggingInterceptor creates a new logging interceptor.
-// By default, it uses a simple funcr logger and logs both requests and responses.
-func NewLoggingInterceptor(_ context.Context, opts ...LoggingInterceptorOption) connect.Interceptor {
+func newLoggingInterceptor(opts []LoggingInterceptorOption) *loggingInterceptor {
 	l := &loggingInterceptor{
 		logRequests:  true,
 		logResponses: true,
@@ -47,6 +48,20 @@ func NewLoggingInterceptor(_ context.Context, opts ...LoggingInterceptorOption) 
 	}
 
 	return l
+}
+
+// NewLoggingClientInterceptor returns a client interceptor that logs each
+// outbound RPC when it starts and when it ends. A unary call ends when its
+// response arrives; a stream ends when Receive reports io.EOF or an error, or
+// when the caller closes it.
+func NewLoggingClientInterceptor(_ context.Context, opts ...LoggingInterceptorOption) connect.ClientInterceptor {
+	return newLoggingInterceptor(opts).client
+}
+
+// NewLoggingServerInterceptor returns a server interceptor that logs each
+// inbound RPC, unary or streaming, when it starts and when the handler returns.
+func NewLoggingServerInterceptor(_ context.Context, opts ...LoggingInterceptorOption) connect.ServerInterceptor {
+	return newLoggingInterceptor(opts).server
 }
 
 // WithLogRequests enables or disables request logging.
@@ -71,20 +86,20 @@ func WithLogHeaders(enabled bool) LoggingInterceptorOption {
 	}
 }
 
-func (l *loggingInterceptor) logRequest(ctx context.Context, req connect.AnyRequest) {
+func (l *loggingInterceptor) logRequest(ctx context.Context, spec connect.Spec, isClient bool, header *connect.Header) {
 	if !l.logRequests {
 		return
 	}
 
 	logger := util.Log(ctx).WithFields(map[string]any{
-		"procedure": req.Spec().Procedure,
-		"method":    req.HTTPMethod(),
-		"is_client": req.Spec().IsClient,
+		"procedure":   spec.Procedure,
+		"stream_type": spec.StreamType.String(),
+		"is_client":   isClient,
 	})
 
-	if l.logHeaders {
-		headers := make(map[string]string)
-		for name, values := range req.Header() {
+	if l.logHeaders && header != nil {
+		headers := make(map[string]string, header.Len())
+		for name, values := range header.All() {
 			if len(values) > 0 {
 				headers[name] = values[0]
 			}
@@ -92,13 +107,17 @@ func (l *loggingInterceptor) logRequest(ctx context.Context, req connect.AnyRequ
 		logger = logger.WithField("headers", headers)
 	}
 
-	logger.Debug("request received")
+	if isClient {
+		logger.Debug("request sent")
+	} else {
+		logger.Debug("request received")
+	}
 }
 
 func (l *loggingInterceptor) logResponse(
 	ctx context.Context,
-	req connect.AnyRequest,
-	_ connect.AnyResponse,
+	spec connect.Spec,
+	isClient bool,
 	err error,
 	duration time.Duration,
 ) {
@@ -107,9 +126,10 @@ func (l *loggingInterceptor) logResponse(
 	}
 
 	logger := util.Log(ctx).WithFields(map[string]any{
-		"procedure":   req.Spec().Procedure,
+		"procedure":   spec.Procedure,
+		"stream_type": spec.StreamType.String(),
 		"duration_ms": duration.Milliseconds(),
-		"is_client":   req.Spec().IsClient,
+		"is_client":   isClient,
 	})
 
 	if err != nil {
@@ -128,86 +148,74 @@ func (l *loggingInterceptor) logResponse(
 	logger.Debug("request completed")
 }
 
-func (l *loggingInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+func (l *loggingInterceptor) client(next connect.ClientFunc) connect.ClientFunc {
+	return func(ctx context.Context, spec connect.Spec) (connect.ClientStream, error) {
 		start := time.Now()
 
-		// Log the request
-		l.logRequest(ctx, req)
-
-		// Execute the request
-		resp, err := next(ctx, req)
-
-		// Log the response
-		duration := time.Since(start)
-		l.logResponse(ctx, req, resp, err, duration)
-
-		return resp, err
-	}
-}
-
-func (l *loggingInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
-		start := time.Now()
-
-		logger := util.Log(ctx).WithFields(map[string]any{
-			"procedure": spec.Procedure,
-			"is_client": true,
-			"streaming": true,
-		})
-		logger.Debug("streaming client request started")
-
-		conn := next(ctx, spec)
-
-		return &loggingClientConn{
-			StreamingClientConn: conn,
-			logger:              logger,
-			start:               start,
+		var header *connect.Header
+		if info, ok := connect.CallInfoForClientContext(ctx); ok {
+			header = info.RequestHeader()
 		}
-	}
-}
+		l.logRequest(ctx, spec, true, header)
 
-func (l *loggingInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		start := time.Now()
-
-		logger := util.Log(ctx).WithFields(map[string]any{
-			"procedure": conn.Spec().Procedure,
-			"is_client": false,
-			"streaming": true,
-		})
-
-		err := next(ctx, conn)
-
-		duration := time.Since(start)
-		logger = logger.WithField("duration_ms", duration.Milliseconds())
+		stream, err := next(ctx, spec)
 		if err != nil {
-			logger.WithError(err).Error("streaming handler request failed")
-		} else {
-			logger.Debug("streaming handler request completed")
+			l.logResponse(ctx, spec, true, err, time.Since(start))
+			return nil, err
 		}
 
+		return &loggingClientStream{
+			ClientStream: stream,
+			finish: func(err error) {
+				l.logResponse(ctx, spec, true, err, time.Since(start))
+			},
+		}, nil
+	}
+}
+
+func (l *loggingInterceptor) server(next connect.ServerFunc) connect.ServerFunc {
+	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+		start := time.Now()
+
+		var header *connect.Header
+		if info, ok := connect.CallInfoForServerContext(ctx); ok {
+			header = info.RequestHeader()
+		}
+		l.logRequest(ctx, spec, false, header)
+
+		err := next(ctx, spec, stream)
+
+		l.logResponse(ctx, spec, false, err, time.Since(start))
 		return err
 	}
 }
 
-// loggingClientConn wraps StreamingClientConn to add logging.
-type loggingClientConn struct {
-	connect.StreamingClientConn
-	logger *util.LogEntry
-	start  time.Time
+// loggingClientStream logs the end of a client RPC exactly once.
+type loggingClientStream struct {
+	connect.ClientStream
+
+	once   sync.Once
+	finish func(error)
 }
 
-func (l *loggingClientConn) CloseRequest() error {
-	err := l.StreamingClientConn.CloseRequest()
-	duration := time.Since(l.start)
+func (s *loggingClientStream) done(err error) {
+	s.once.Do(func() { s.finish(err) })
+}
 
-	logger := l.logger.WithField("duration_ms", duration.Milliseconds())
-	if err != nil {
-		logger.WithError(err).Error("streaming client request failed")
-	} else {
-		logger.Debug("streaming client request completed")
+func (s *loggingClientStream) Receive(msg any) error {
+	err := s.ClientStream.Receive(msg)
+	switch {
+	case err == nil:
+	case errors.Is(err, io.EOF):
+		s.done(nil)
+	default:
+		s.done(err)
 	}
+	return err
+}
 
+func (s *loggingClientStream) Close() error {
+	err := s.ClientStream.Close()
+	s.done(err)
 	return err
 }

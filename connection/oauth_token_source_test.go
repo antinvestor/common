@@ -24,9 +24,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/antinvestor/common/v2"
-	commonconnection "github.com/antinvestor/common/v2/connection"
-	"github.com/antinvestor/common/v2/connection/options"
+	"github.com/antinvestor/common/v3"
+	commonconnection "github.com/antinvestor/common/v3/connection"
+	"github.com/antinvestor/common/v3/connection/options"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/suite"
 )

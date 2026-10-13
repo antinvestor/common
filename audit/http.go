@@ -20,7 +20,7 @@ import (
 	"net/http"
 	"time"
 
-	auditv1connect "buf.build/gen/go/antinvestor/audit/connectrpc/go/audit/v1/auditv1connect"
+	auditv1connect "buf.build/gen/go/antinvestor/audit/connectrpc/go/v2/audit/v1/auditv1connect"
 )
 
 // HTTPMiddleware returns an http.Handler middleware that audits REST calls

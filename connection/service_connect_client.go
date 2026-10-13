@@ -17,12 +17,12 @@ package connection
 import (
 	"context"
 
-	"connectrpc.com/connect"
-	"github.com/antinvestor/common/v2"
+	"connectrpc.com/connect/v2"
+	"github.com/antinvestor/common/v3"
 )
 
 // ConnectServiceClientFactory builds a generated Connect client from a resolved transport.
-type ConnectServiceClientFactory[T any] func(connect.HTTPClient, string, ...connect.ClientOption) T
+type ConnectServiceClientFactory[T any] func(*connect.Client) T
 
 // NewConnectClient builds a final generated Connect client from already-resolved client options.
 func NewConnectClient[T any](
@@ -37,7 +37,7 @@ func NewConnectClient[T any](
 		return zero, err
 	}
 
-	return factory(clientBase.Client(), clientBase.Endpoint(), clientBase.Options()...), nil
+	return factory(clientBase.ConnectClient()), nil
 }
 
 // NewServiceClient resolves service configuration and immediately constructs a generated Connect client.

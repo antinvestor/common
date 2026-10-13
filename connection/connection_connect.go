@@ -18,12 +18,14 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 	"time"
 
-	"connectrpc.com/connect"
-	"github.com/antinvestor/common/v2"
-	"github.com/antinvestor/common/v2/connection/options"
-	"github.com/antinvestor/common/v2/interceptors"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/antinvestor/common/v3"
+	"github.com/antinvestor/common/v3/connection/options"
+	"github.com/antinvestor/common/v3/interceptors"
 	"github.com/pitabwire/util"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/oauth2"
@@ -40,37 +42,49 @@ type ConnectClientBase struct {
 
 	endpoint string
 
-	interceptors []connect.Interceptor
+	interceptors []connect.ClientInterceptor
+
+	// transportOpts are the caller's connecthttp options from DialSettings.
+	transportOpts []connecthttp.Option
 
 	// The x-ant-* metadata to be sent with each request.
 	xMetadata string
 }
 
-// Client obtains the http client for the API service.
-// User should always use this client is required.
+// Client returns the HTTP client that carries RPCs to the service.
 func (ccb *ConnectClientBase) Client() *http.Client {
 	return ccb.client
 }
 
-// Endpoint obtains the http uri for the API service.
+// Endpoint returns the service base URL.
 func (ccb *ConnectClientBase) Endpoint() string {
 	return ccb.endpoint
 }
 
-// Options returns the API client can use to configure itself.
-func (ccb *ConnectClientBase) Options(opts ...connect.ClientOption) []connect.ClientOption {
-	if len(ccb.interceptors) > 0 {
-		opts = append(opts, connect.WithInterceptors(ccb.interceptors...))
-	}
-
-	opts = append(opts, connect.WithHTTPGet())
-
-	return opts
+// Interceptors returns the client interceptor chain: authentication,
+// partition headers and, when tracing is on, logging.
+func (ccb *ConnectClientBase) Interceptors() []connect.ClientInterceptor {
+	return slices.Clone(ccb.interceptors)
 }
 
-// SetInfo sets the name and version of the application in
-// the `x-goog-api-client` header passed on each request. Intended for
-// use by Google-written clients.
+// TransportOptions returns the connecthttp options for the service transport:
+// Connect GET for side-effect-free RPCs, then the options set through
+// common.WithConnectTransportOptions, then opts.
+func (ccb *ConnectClientBase) TransportOptions(opts ...connecthttp.Option) []connecthttp.Option {
+	out := make([]connecthttp.Option, 0, 1+len(ccb.transportOpts)+len(opts))
+	out = append(out, connecthttp.WithHTTPGet())
+	out = append(out, ccb.transportOpts...)
+	return append(out, opts...)
+}
+
+// ConnectClient returns a connect-go v2 client for the service: an HTTP
+// transport over Client() to Endpoint() with TransportOptions(opts...), wrapped
+// in Interceptors(). Pass it to a generated New<Service>Client constructor.
+func (ccb *ConnectClientBase) ConnectClient(opts ...connecthttp.Option) *connect.Client {
+	transport := connecthttp.NewTransport(ccb.client, ccb.endpoint, ccb.TransportOptions(opts...)...)
+	return connect.NewClient(transport, ccb.interceptors...)
+}
+
 func (ccb *ConnectClientBase) SetInfo(keyval ...string) {
 	kv := append([]string{"gl-go", VersionGo()}, keyval...)
 	kv = append(kv, "connect", connect.Version)
@@ -109,8 +123,9 @@ func NewConnectClientBase(ctx context.Context, opts ...common.ClientOption) (*Co
 	}
 
 	clientBase := ConnectClientBase{
-		client:   httpClient,
-		endpoint: ds.Endpoint,
+		client:        httpClient,
+		endpoint:      ds.Endpoint,
+		transportOpts: slices.Clone(ds.ConnectTransportOpts),
 	}
 	clientBase.SetInfo()
 
@@ -123,13 +138,13 @@ func NewConnectClientBase(ctx context.Context, opts ...common.ClientOption) (*Co
 		return nil, err
 	}
 
-	clientBase.interceptors = []connect.Interceptor{
+	clientBase.interceptors = []connect.ClientInterceptor{
 		authInterceptor,
 		interceptors.NewPartitionInfoInterceptor(clientBase.GetInfo())}
 
 	if ds.TraceRequests || ds.TraceResponses || ds.TraceHeaders {
 		clientBase.interceptors = append(clientBase.interceptors,
-			interceptors.NewLoggingInterceptor(ctx,
+			interceptors.NewLoggingClientInterceptor(ctx,
 				interceptors.WithLogRequests(ds.TraceRequests),
 				interceptors.WithLogResponses(ds.TraceResponses),
 				interceptors.WithLogHeaders(ds.TraceHeaders)))
@@ -143,7 +158,7 @@ func newAuthInterceptor(
 	ds *common.DialSettings,
 	serviceHTTPClient *http.Client,
 	baseHTTPDialOpts []options.HTTPOption,
-) (connect.Interceptor, error) {
+) (connect.ClientInterceptor, error) {
 	var authOpts []interceptors.AuthInterceptorOption
 
 	if ds.APICredential != "" {

@@ -16,23 +16,28 @@ package interceptors
 
 import (
 	"context"
-	"net/http"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/pitabwire/util"
 )
 
-type partitionInfoSetInterceptor struct {
-	clientInfo string
-}
-
-func NewPartitionInfoInterceptor(clientInfo string) connect.Interceptor {
-	return &partitionInfoSetInterceptor{
-		clientInfo: clientInfo,
+// NewPartitionInfoInterceptor returns a client interceptor that stamps every
+// outbound RPC with the X-Ai-Api-Client header and, when ctx carries tenancy
+// information, the X-Tenant-Id, X-Partition-Id and X-Access-Id headers.
+func NewPartitionInfoInterceptor(clientInfo string) connect.ClientInterceptor {
+	return func(next connect.ClientFunc) connect.ClientFunc {
+		return func(ctx context.Context, spec connect.Spec) (connect.ClientStream, error) {
+			if info, ok := connect.CallInfoForClientContext(ctx); ok {
+				header := info.RequestHeader()
+				header.Set("X-Ai-Api-Client", clientInfo)
+				setTenancyInfo(ctx, header)
+			}
+			return next(ctx, spec)
+		}
 	}
 }
 
-func (ai *partitionInfoSetInterceptor) setTenancyInfo(ctx context.Context, header http.Header) {
+func setTenancyInfo(ctx context.Context, header *connect.Header) {
 	tenancyInfo := util.GetTenancy(ctx)
 	if tenancyInfo == nil {
 		return
@@ -41,43 +46,4 @@ func (ai *partitionInfoSetInterceptor) setTenancyInfo(ctx context.Context, heade
 	header.Set("X-Tenant-Id", tenancyInfo.GetTenantID())
 	header.Set("X-Partition-Id", tenancyInfo.GetPartitionID())
 	header.Set("X-Access-Id", tenancyInfo.GetAccessID())
-}
-
-func (ai *partitionInfoSetInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	// Same as previous UnaryInterceptorFunc.
-	return func(
-		ctx context.Context,
-		req connect.AnyRequest,
-	) (connect.AnyResponse, error) {
-		if req.Spec().IsClient {
-			req.Header().Set("X-Ai-Api-Client", ai.clientInfo)
-			ai.setTenancyInfo(ctx, req.Header())
-		}
-		return next(ctx, req)
-	}
-}
-
-func (ai *partitionInfoSetInterceptor) WrapStreamingClient(
-	next connect.StreamingClientFunc,
-) connect.StreamingClientFunc {
-	return func(
-		ctx context.Context,
-		spec connect.Spec,
-	) connect.StreamingClientConn {
-		conn := next(ctx, spec)
-		conn.RequestHeader().Set("X-Ai-Api-Client", ai.clientInfo)
-		ai.setTenancyInfo(ctx, conn.RequestHeader())
-		return conn
-	}
-}
-
-func (ai *partitionInfoSetInterceptor) WrapStreamingHandler(
-	next connect.StreamingHandlerFunc,
-) connect.StreamingHandlerFunc {
-	return func(
-		ctx context.Context,
-		conn connect.StreamingHandlerConn,
-	) error {
-		return next(ctx, conn)
-	}
 }

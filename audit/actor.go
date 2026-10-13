@@ -18,7 +18,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/pitabwire/frame/v2/security"
+	"github.com/pitabwire/frame/v3/security"
 )
 
 // Actor is the person an audit entry is attributed to.

@@ -48,10 +48,10 @@ import (
 	"strings"
 	"time"
 
-	auditv1connect "buf.build/gen/go/antinvestor/audit/connectrpc/go/audit/v1/auditv1connect"
+	auditv1connect "buf.build/gen/go/antinvestor/audit/connectrpc/go/v2/audit/v1/auditv1connect"
 	auditv1 "buf.build/gen/go/antinvestor/audit/protocolbuffers/go/audit/v1"
-	"connectrpc.com/connect"
-	"github.com/pitabwire/frame/v2/security"
+	"connectrpc.com/connect/v2"
+	"github.com/pitabwire/frame/v3/security"
 	"github.com/pitabwire/util"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -291,82 +291,59 @@ func (DefaultConfig) AuditShouldSkipHTTP(method string) bool {
 
 const meterName = "antinvestor.audit"
 
-// Interceptor is a Connect RPC interceptor that captures audit entries
-// for non-idempotent RPCs whose caller is a person.
-type Interceptor struct {
-	serviceName string
-	auditClient auditv1connect.AuditServiceClient
-	config      Config
-	sender      *sender
+// interceptor is a Connect RPC server interceptor that captures audit
+// entries for non-idempotent RPCs whose caller is a person.
+type interceptor struct {
+	config Config
+	sender *sender
 }
 
-// NewInterceptor creates an audit interceptor with default config.
+// NewInterceptor creates an audit server interceptor with default config.
+// Pass it to connect.NewServer (or frame's ConnectDefaultInterceptors).
 //
 //   - serviceName: identifies the originating service (e.g. "service_profile").
 //     It must equal the service_name claim of the producer's service account;
 //     the audit service rejects entries logged under any other name.
 //   - auditClient: the audit service client, built with ClientOptions so its
 //     timeout is short. If nil, entries are only logged.
-func NewInterceptor(serviceName string, auditClient auditv1connect.AuditServiceClient) connect.Interceptor {
+func NewInterceptor(serviceName string, auditClient auditv1connect.AuditServiceClient) connect.ServerInterceptor {
 	return NewInterceptorWithConfig(serviceName, auditClient, DefaultConfig{})
 }
 
-// NewInterceptorWithConfig creates an audit interceptor with explicit configuration.
-func NewInterceptorWithConfig(serviceName string, auditClient auditv1connect.AuditServiceClient, cfg Config) connect.Interceptor {
+// NewInterceptorWithConfig creates an audit server interceptor with explicit
+// configuration. It covers unary and streaming RPCs alike.
+func NewInterceptorWithConfig(serviceName string, auditClient auditv1connect.AuditServiceClient, cfg Config) connect.ServerInterceptor {
 	if cfg == nil {
 		cfg = DefaultConfig{}
 	}
-	return &Interceptor{
-		serviceName: serviceName,
-		auditClient: auditClient,
-		config:      cfg,
-		sender:      newSender(serviceName, auditClient),
+	a := &interceptor{
+		config: cfg,
+		sender: newSender(serviceName, auditClient),
 	}
+	return a.intercept
 }
 
-func (a *Interceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		if a.config.AuditShouldSkipRPC(req.Spec()) {
-			return next(ctx, req)
+func (a *interceptor) intercept(next connect.ServerFunc) connect.ServerFunc {
+	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+		if a.config.AuditShouldSkipRPC(spec) {
+			return next(ctx, spec, stream)
 		}
 		actorCtx := ctx
 		start := time.Now()
 		ctx = initEntry(ctx)
 		if e := entryFromContext(ctx); e != nil {
-			e.IPAddress = extractIPAddress(req.Header())
-			e.UserAgent = req.Header().Get("User-Agent")
+			if info, ok := connect.CallInfoForServerContext(ctx); ok {
+				e.IPAddress = extractIPAddress(info.RequestHeader())
+				e.UserAgent = info.RequestHeader().Get("User-Agent")
+			}
 		}
 
-		resp, err := next(ctx, req)
+		err := next(ctx, spec, stream)
 
 		// The actor is resolved after the handler ran so WithOnBehalfOf is
 		// visible; claims come from the original context.
 		if actor, ok := ResolveActor(ctx); ok {
-			a.sender.record(actorCtx, ctx, actor, req.Spec().Procedure, start, err)
-		}
-		return resp, err
-	}
-}
-
-func (a *Interceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (a *Interceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		if a.config.AuditShouldSkipRPC(conn.Spec()) {
-			return next(ctx, conn)
-		}
-		actorCtx := ctx
-		start := time.Now()
-		ctx = initEntry(ctx)
-		if e := entryFromContext(ctx); e != nil {
-			e.IPAddress = extractIPAddress(conn.RequestHeader())
-			e.UserAgent = conn.RequestHeader().Get("User-Agent")
-		}
-		err := next(ctx, conn)
-		if actor, ok := ResolveActor(ctx); ok {
-			a.sender.record(actorCtx, ctx, actor, conn.Spec().Procedure, start, err)
+			a.sender.record(actorCtx, ctx, actor, spec.Procedure, start, err)
 		}
 		return err
 	}
@@ -442,7 +419,7 @@ func (s *sender) record(ctx, enriched context.Context, actor Actor, procedure st
 	}
 	sendCtx, span := s.tracer.Start(ctx, "audit.send")
 	defer span.End()
-	if _, err := s.client.CreateAuditEntry(sendCtx, connect.NewRequest(req)); err != nil {
+	if _, err := s.client.CreateAuditEntry(sendCtx, req); err != nil {
 		code := connect.CodeOf(err).String()
 		s.failures.Add(ctx, 1, metric.WithAttributes(attribute.String("service", s.serviceName), attribute.String("code", code)))
 		util.Log(ctx).WithError(err).WithField("audit", true).WithField("code", code).
@@ -528,7 +505,12 @@ func (s *sender) buildRequest(ctx context.Context, actor Actor, entry *Entry, pr
 // ─────────────────────────────────────────────────────────────────────────────
 
 // extractIPAddress reads the client IP from standard proxy headers.
-func extractIPAddress(h http.Header) string {
+// headerGetter is satisfied by http.Header and *connect.Header.
+type headerGetter interface {
+	Get(key string) string
+}
+
+func extractIPAddress(h headerGetter) string {
 	if xff := h.Get("X-Forwarded-For"); xff != "" {
 		if i := strings.IndexByte(xff, ','); i > 0 {
 			return strings.TrimSpace(xff[:i])

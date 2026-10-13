@@ -21,27 +21,52 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"connectrpc.com/connect"
-	"github.com/antinvestor/common/v2"
-	commonconnection "github.com/antinvestor/common/v2/connection"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/antinvestor/common/v3"
+	commonconnection "github.com/antinvestor/common/v3/connection"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type connectClientCapture struct {
-	client      connect.HTTPClient
-	endpoint    string
-	optionCount int
+	client *connect.Client
+}
+
+const pingProcedure = "/test.v1.TestService/Ping"
+
+var pingSpec = connect.Spec{StreamType: connect.StreamTypeUnary, Procedure: pingProcedure}
+
+// pingHandler serves the unary Ping procedure, returning an empty message.
+func pingHandler() http.Handler {
+	server := connect.NewServer()
+	server.Register(connect.Method{
+		Spec: pingSpec,
+		Handler: func(_ context.Context, _ connect.Spec, stream connect.ServerStream) error {
+			var req emptypb.Empty
+			if err := stream.Receive(&req); err != nil {
+				return err
+			}
+			return stream.Send(&emptypb.Empty{})
+		},
+	})
+	mux := http.NewServeMux()
+	connecthttp.Mount(mux, server)
+	return mux
+}
+
+func ping(ctx context.Context, client *connect.Client) (*emptypb.Empty, error) {
+	var res emptypb.Empty
+	if err := client.CallUnary(ctx, pingSpec, &emptypb.Empty{}, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
 }
 
 func TestNewConnectClientBuildsGeneratedClient(t *testing.T) {
 	client, err := commonconnection.NewConnectClient(
 		context.Background(),
-		func(httpClient connect.HTTPClient, endpoint string, opts ...connect.ClientOption) *connectClientCapture {
-			return &connectClientCapture{
-				client:      httpClient,
-				endpoint:    endpoint,
-				optionCount: len(opts),
-			}
+		func(client *connect.Client) *connectClientCapture {
+			return &connectClientCapture{client: client}
 		},
 		common.WithEndpoint("http://service.internal"),
 		common.WithoutAuthentication(),
@@ -53,13 +78,7 @@ func TestNewConnectClientBuildsGeneratedClient(t *testing.T) {
 		t.Fatal("expected constructed client")
 	}
 	if client.client == nil {
-		t.Fatal("expected http client to be configured")
-	}
-	if client.endpoint != "http://service.internal" {
-		t.Fatalf("expected endpoint to be preserved, got %q", client.endpoint)
-	}
-	if client.optionCount == 0 {
-		t.Fatal("expected connect client options to be passed through")
+		t.Fatal("expected connect client to be configured")
 	}
 }
 
@@ -70,12 +89,8 @@ func TestNewServiceClientResolvesTargetBeforeConstructingGeneratedClient(t *test
 		common.ServiceTarget{
 			Endpoint: "https://service.internal",
 		},
-		func(httpClient connect.HTTPClient, endpoint string, opts ...connect.ClientOption) *connectClientCapture {
-			return &connectClientCapture{
-				client:      httpClient,
-				endpoint:    endpoint,
-				optionCount: len(opts),
-			}
+		func(client *connect.Client) *connectClientCapture {
+			return &connectClientCapture{client: client}
 		},
 		common.WithoutAuthentication(),
 	)
@@ -86,18 +101,12 @@ func TestNewServiceClientResolvesTargetBeforeConstructingGeneratedClient(t *test
 		t.Fatal("expected constructed client")
 	}
 	if client.client == nil {
-		t.Fatal("expected http client to be configured")
-	}
-	if client.endpoint != "https://service.internal" {
-		t.Fatalf("expected resolved endpoint to be passed through, got %q", client.endpoint)
-	}
-	if client.optionCount == 0 {
-		t.Fatal("expected connect client options to be passed through")
+		t.Fatal("expected connect client to be configured")
 	}
 }
 
 func TestNewConnectClientUsesHTTP11TokenEndpointForHTTPServices(t *testing.T) {
-	const procedure = "/test.v1.TestService/Ping"
+	const procedure = pingProcedure
 	var tokenProto atomic.Int32
 	var serviceProto atomic.Int32
 
@@ -139,20 +148,13 @@ func TestNewConnectClientUsesHTTP11TokenEndpointForHTTPServices(t *testing.T) {
 			http.Error(w, "missing authorization", http.StatusUnauthorized)
 			return
 		}
-		connect.NewUnaryHandler(
-			procedure,
-			func(_ context.Context, _ *connect.Request[emptypb.Empty]) (*connect.Response[emptypb.Empty], error) {
-				return connect.NewResponse(&emptypb.Empty{}), nil
-			},
-		).ServeHTTP(w, r)
+		pingHandler().ServeHTTP(w, r)
 	}))
 	defer serviceServer.Close()
 
 	client, err := commonconnection.NewConnectClient(
 		context.Background(),
-		func(httpClient connect.HTTPClient, endpoint string, opts ...connect.ClientOption) *connect.Client[emptypb.Empty, emptypb.Empty] {
-			return connect.NewClient[emptypb.Empty, emptypb.Empty](httpClient, endpoint+procedure, opts...)
-		},
+		func(client *connect.Client) *connect.Client { return client },
 		common.WithEndpoint(serviceServer.URL),
 		common.WithTokenEndpoint(tokenServer.URL),
 		common.WithTokenUsername("svc-client"),
@@ -162,11 +164,11 @@ func TestNewConnectClientUsesHTTP11TokenEndpointForHTTPServices(t *testing.T) {
 		t.Fatalf("NewConnectClient returned error: %v", err)
 	}
 
-	resp, err := client.CallUnary(context.Background(), connect.NewRequest(&emptypb.Empty{}))
+	resp, err := ping(context.Background(), client)
 	if err != nil {
 		t.Fatalf("Ping returned error: %v", err)
 	}
-	if resp == nil || resp.Msg == nil {
+	if resp == nil {
 		t.Fatal("expected unary response")
 	}
 	if got := tokenProto.Load(); got != 1 {
@@ -178,7 +180,7 @@ func TestNewConnectClientUsesHTTP11TokenEndpointForHTTPServices(t *testing.T) {
 }
 
 func TestNewConnectClientCanOptIntoH2CForHTTPServices(t *testing.T) {
-	const procedure = "/test.v1.TestService/Ping"
+	const procedure = pingProcedure
 	var tokenProto atomic.Int32
 	var serviceProto atomic.Int32
 
@@ -216,12 +218,7 @@ func TestNewConnectClientCanOptIntoH2CForHTTPServices(t *testing.T) {
 			http.Error(w, "missing authorization", http.StatusUnauthorized)
 			return
 		}
-		connect.NewUnaryHandler(
-			procedure,
-			func(_ context.Context, _ *connect.Request[emptypb.Empty]) (*connect.Response[emptypb.Empty], error) {
-				return connect.NewResponse(&emptypb.Empty{}), nil
-			},
-		).ServeHTTP(w, r)
+		pingHandler().ServeHTTP(w, r)
 	}))
 	// Prefer stdlib unencrypted HTTP/2 instead of deprecated h2c.NewHandler.
 	protocols := new(http.Protocols)
@@ -233,9 +230,7 @@ func TestNewConnectClientCanOptIntoH2CForHTTPServices(t *testing.T) {
 
 	client, err := commonconnection.NewConnectClient(
 		context.Background(),
-		func(httpClient connect.HTTPClient, endpoint string, opts ...connect.ClientOption) *connect.Client[emptypb.Empty, emptypb.Empty] {
-			return connect.NewClient[emptypb.Empty, emptypb.Empty](httpClient, endpoint+procedure, opts...)
-		},
+		func(client *connect.Client) *connect.Client { return client },
 		common.WithEndpoint(serviceServer.URL),
 		common.WithHTTPEnableH2C(),
 		common.WithTokenEndpoint(tokenServer.URL),
@@ -246,11 +241,11 @@ func TestNewConnectClientCanOptIntoH2CForHTTPServices(t *testing.T) {
 		t.Fatalf("NewConnectClient returned error: %v", err)
 	}
 
-	resp, err := client.CallUnary(context.Background(), connect.NewRequest(&emptypb.Empty{}))
+	resp, err := ping(context.Background(), client)
 	if err != nil {
 		t.Fatalf("Ping returned error: %v", err)
 	}
-	if resp == nil || resp.Msg == nil {
+	if resp == nil {
 		t.Fatal("expected unary response")
 	}
 	if got := tokenProto.Load(); got != 1 {
@@ -258,5 +253,32 @@ func TestNewConnectClientCanOptIntoH2CForHTTPServices(t *testing.T) {
 	}
 	if got := serviceProto.Load(); got != 2 {
 		t.Fatalf("expected service endpoint to use h2c, got HTTP/%d", got)
+	}
+}
+
+func TestNewConnectClientAppliesConnectTransportOptions(t *testing.T) {
+	var contentType atomic.Value
+	serviceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		contentType.Store(r.Header.Get("Content-Type"))
+		pingHandler().ServeHTTP(w, r)
+	}))
+	defer serviceServer.Close()
+
+	client, err := commonconnection.NewConnectClient(
+		context.Background(),
+		func(client *connect.Client) *connect.Client { return client },
+		common.WithEndpoint(serviceServer.URL),
+		common.WithoutAuthentication(),
+		common.WithConnectTransportOptions(connecthttp.WithProtoJSON()),
+	)
+	if err != nil {
+		t.Fatalf("NewConnectClient returned error: %v", err)
+	}
+
+	if _, err := ping(context.Background(), client); err != nil {
+		t.Fatalf("Ping returned error: %v", err)
+	}
+	if got, _ := contentType.Load().(string); got != "application/json" {
+		t.Fatalf("expected the JSON codec from WithConnectTransportOptions, got Content-Type %q", got)
 	}
 }
