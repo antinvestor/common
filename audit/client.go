@@ -19,11 +19,12 @@ import (
 	"net/http"
 	"time"
 
-	auditv1connect "buf.build/gen/go/antinvestor/audit/connectrpc/go/audit/v1/auditv1connect"
-	"connectrpc.com/connect"
-	common "github.com/antinvestor/common/v2"
-	"github.com/antinvestor/common/v2/connection"
-	"github.com/antinvestor/common/v2/connection/options"
+	auditv1connect "buf.build/gen/go/antinvestor/audit/connectrpc/go/v2/audit/v1/auditv1connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	common "github.com/antinvestor/common/v3"
+	"github.com/antinvestor/common/v3/connection"
+	"github.com/antinvestor/common/v3/connection/options"
 )
 
 // ClientTimeout bounds every call the interceptor makes. It is set once on
@@ -36,13 +37,13 @@ func NewAuditClient(baseURL string, httpClient *http.Client) auditv1connect.Audi
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: ClientTimeout}
 	}
-	return auditv1connect.NewAuditServiceClient(httpClient, baseURL)
+	return auditv1connect.NewAuditServiceClient(connect.NewClient(connecthttp.NewTransport(httpClient, baseURL)))
 }
 
 // NewConnectClient creates a Connect RPC audit service client.
 // This signature matches the pattern expected by connection.NewServiceClient.
-func NewConnectClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) auditv1connect.AuditServiceClient {
-	return auditv1connect.NewAuditServiceClient(httpClient, baseURL, opts...)
+func NewConnectClient(client *connect.Client) auditv1connect.AuditServiceClient {
+	return auditv1connect.NewAuditServiceClient(client)
 }
 
 // ClientOptions returns the client options producers should pass to

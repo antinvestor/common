@@ -18,8 +18,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pitabwire/frame/v2"
-	"github.com/pitabwire/frame/v2/setup"
+	"github.com/pitabwire/frame/v3"
+	"github.com/pitabwire/frame/v3/setup"
 	"github.com/pitabwire/util"
 )
 

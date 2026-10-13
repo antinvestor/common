@@ -18,7 +18,8 @@ import (
 	"crypto/tls"
 	"net/http"
 
-	"github.com/antinvestor/common/v2/connection/options"
+	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/antinvestor/common/v3/connection/options"
 	"golang.org/x/oauth2"
 	"google.golang.org/grpc"
 )
@@ -322,4 +323,19 @@ type withHTTPWorkloadAPITargetPath string
 
 func (w withHTTPWorkloadAPITargetPath) Apply(o *DialSettings) {
 	o.HTTPDialOpts = append(o.HTTPDialOpts, options.WithHTTPWorkloadAPITargetPath(string(w)))
+}
+
+// WithConnectTransportOptions adds connect-go v2 HTTP transport options to
+// Connect clients built by the connection package, for example
+// connecthttp.WithReadMaxBytes to raise the default 4 MiB per-message read
+// limit, connecthttp.WithGRPC or connecthttp.WithProtoJSON. They apply after
+// the defaults, so they override them.
+func WithConnectTransportOptions(opts ...connecthttp.Option) ClientOption {
+	return withConnectTransportOptions(opts)
+}
+
+type withConnectTransportOptions []connecthttp.Option
+
+func (w withConnectTransportOptions) Apply(o *DialSettings) {
+	o.ConnectTransportOpts = append(o.ConnectTransportOpts, w...)
 }

@@ -24,7 +24,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/antinvestor/common/v2"
+	"github.com/antinvestor/common/v3"
 	"github.com/pitabwire/util"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"golang.org/x/oauth2"

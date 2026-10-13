@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	notificationv1 "buf.build/gen/go/antinvestor/notification/protocolbuffers/go/notification/v1"
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
 	"github.com/antinvestor/common/notification"
@@ -31,12 +30,12 @@ type fakeSaver struct {
 	err  error
 }
 
-func (f *fakeSaver) TemplateSave(_ context.Context, req *connect.Request[notificationv1.TemplateSaveRequest]) (*connect.Response[notificationv1.TemplateSaveResponse], error) {
+func (f *fakeSaver) TemplateSave(_ context.Context, req *notificationv1.TemplateSaveRequest) (*notificationv1.TemplateSaveResponse, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
-	f.reqs = append(f.reqs, req.Msg)
-	return connect.NewResponse(notificationv1.TemplateSaveResponse_builder{}.Build()), nil
+	f.reqs = append(f.reqs, req)
+	return notificationv1.TemplateSaveResponse_builder{}.Build(), nil
 }
 
 func shipped() notification.Template {

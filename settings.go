@@ -20,7 +20,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/antinvestor/common/v2/connection/options"
+	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/antinvestor/common/v3/connection/options"
 	"google.golang.org/grpc"
 
 	"golang.org/x/oauth2"
@@ -51,6 +52,7 @@ type DialSettings struct {
 	HTTPEnableH2C            bool
 	HTTPDialOpts             []options.HTTPOption
 	GRPCDialOpts             []grpc.DialOption
+	ConnectTransportOpts     []connecthttp.Option
 	GRPCConn                 *grpc.ClientConn
 	ClientCertSource         func(*tls.CertificateRequestInfo) (*tls.Certificate, error)
 	NoAuth                   bool

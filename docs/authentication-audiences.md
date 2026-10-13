@@ -16,8 +16,8 @@ Import Common using its semantic v2 path:
 
 ```go
 import (
-    common "github.com/antinvestor/common/v2"
-    "github.com/antinvestor/common/v2/servicecatalog"
+    common "github.com/antinvestor/common/v3"
+    "github.com/antinvestor/common/v3/servicecatalog"
 )
 
 opts, err := common.ClientOptions(ctx, cfg, common.ServiceTarget{

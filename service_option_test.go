@@ -18,9 +18,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/antinvestor/common/v2"
-	"github.com/antinvestor/common/v2/connection/options"
-	"github.com/antinvestor/common/v2/servicecatalog"
+	"github.com/antinvestor/common/v3"
+	"github.com/antinvestor/common/v3/connection/options"
+	"github.com/antinvestor/common/v3/servicecatalog"
 	"github.com/stretchr/testify/suite"
 )
 

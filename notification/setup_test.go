@@ -19,7 +19,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/pitabwire/frame/v2"
+	"github.com/pitabwire/frame/v3"
 	"github.com/stretchr/testify/require"
 
 	"github.com/antinvestor/common/notification"

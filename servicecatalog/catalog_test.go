@@ -3,7 +3,7 @@ package servicecatalog_test
 import (
 	"testing"
 
-	"github.com/antinvestor/common/v2/servicecatalog"
+	"github.com/antinvestor/common/v3/servicecatalog"
 	"github.com/stretchr/testify/require"
 )
 
