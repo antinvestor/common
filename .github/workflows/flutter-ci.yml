@@ -173,12 +173,18 @@ jobs:
 
       # Later gates run even when an earlier one failed, so one run reports
       # every problem with the package.
-      # The dry-run goes first: flutter analyze rewrites analysis_options.yaml
-      # (Flutter 3.47 adds build/platform excludes), and pub warns about any
-      # modified checked-in file.
+      # Flutter 3.47's pub get migrates analysis_options.yaml (it adds an
+      # analyzer exclude for build/), and pub publish warns about any modified
+      # checked-in file. That rewrite is the tool's, not the package's, so it
+      # is reverted before the dry-run; every other modification still fails.
       - name: Publish dry-run
         if: ${{ !cancelled() && steps.deps.outcome == 'success' && matrix.package.publish }}
-        run: $PUB pub publish --dry-run
+        run: |
+          if [ -f analysis_options.yaml ] && ! git diff --quiet -- analysis_options.yaml; then
+            echo "::notice::flutter rewrote analysis_options.yaml; reverting it for the dry-run"
+            git checkout -- analysis_options.yaml
+          fi
+          $PUB pub publish --dry-run
 
       - name: Format
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
