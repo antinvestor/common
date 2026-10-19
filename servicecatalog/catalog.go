@@ -18,6 +18,7 @@ const (
 	ServiceChatAgent                  ServiceID = "chat-agent"
 	ServiceChatDrone                  ServiceID = "chat-drone"
 	ServiceChatGateway                ServiceID = "chat-gateway"
+	ServiceCommerce                   ServiceID = "commerce"
 	ServiceCheckout                   ServiceID = "checkout"
 	ServiceDevices                    ServiceID = "devices"
 	ServiceFiles                      ServiceID = "files"
@@ -30,6 +31,7 @@ const (
 	ServiceLedger                     ServiceID = "ledger"
 	ServiceLimits                     ServiceID = "limits"
 	ServiceLoans                      ServiceID = "loans"
+	ServiceManufacturing              ServiceID = "manufacturing"
 	ServiceMatching                   ServiceID = "matching"
 	ServiceNotification               ServiceID = "notification"
 	ServiceNotificationAfricasTalking ServiceID = "notification-africastalking"
@@ -47,6 +49,7 @@ const (
 	ServicePaymentPawaPay             ServiceID = "payment-pawapay"
 	ServicePaymentPolar               ServiceID = "payment-polar"
 	ServicePaymentStripe              ServiceID = "payment-stripe"
+	ServiceProcurement                ServiceID = "procurement"
 	ServiceProfile                    ServiceID = "profile"
 	ServiceQueuestore                 ServiceID = "queuestore"
 	ServiceRedirect                   ServiceID = "redirect"
@@ -74,6 +77,7 @@ var definitions = map[ServiceID]Definition{
 	ServiceChatAgent:                  {ID: ServiceChatAgent, AudiencePath: "/chat-agent"},
 	ServiceChatDrone:                  {ID: ServiceChatDrone, AudiencePath: "/chat-drone"},
 	ServiceChatGateway:                {ID: ServiceChatGateway, AudiencePath: "/chat-gateway"},
+	ServiceCommerce:                   {ID: ServiceCommerce, AudiencePath: "/commerce"},
 	ServiceCheckout:                   {ID: ServiceCheckout, AudiencePath: "/checkout"},
 	ServiceDevices:                    {ID: ServiceDevices, AudiencePath: "/devices"},
 	ServiceFiles:                      {ID: ServiceFiles, AudiencePath: "/files"},
@@ -86,6 +90,7 @@ var definitions = map[ServiceID]Definition{
 	ServiceLedger:                     {ID: ServiceLedger, AudiencePath: "/ledger"},
 	ServiceLimits:                     {ID: ServiceLimits, AudiencePath: "/limits"},
 	ServiceLoans:                      {ID: ServiceLoans, AudiencePath: "/loans"},
+	ServiceManufacturing:              {ID: ServiceManufacturing, AudiencePath: "/manufacturing"},
 	ServiceMatching:                   {ID: ServiceMatching, AudiencePath: "/matching"},
 	ServiceNotification:               {ID: ServiceNotification, AudiencePath: "/notification"},
 	ServiceNotificationAfricasTalking: {ID: ServiceNotificationAfricasTalking, AudiencePath: "/notification-africastalking"},
@@ -103,6 +108,7 @@ var definitions = map[ServiceID]Definition{
 	ServicePaymentPawaPay:             {ID: ServicePaymentPawaPay, AudiencePath: "/payment-pawapay"},
 	ServicePaymentPolar:               {ID: ServicePaymentPolar, AudiencePath: "/payment-polar"},
 	ServicePaymentStripe:              {ID: ServicePaymentStripe, AudiencePath: "/payment-stripe"},
+	ServiceProcurement:                {ID: ServiceProcurement, AudiencePath: "/procurement"},
 	ServiceProfile:                    {ID: ServiceProfile, AudiencePath: "/profile"},
 	ServiceQueuestore:                 {ID: ServiceQueuestore, AudiencePath: "/queuestore"},
 	ServiceRedirect:                   {ID: ServiceRedirect, AudiencePath: "/redirect"},
