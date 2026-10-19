@@ -64,6 +64,7 @@ func TestCatalogContainsCanonicalPlatformServices(t *testing.T) {
 		servicecatalog.ServiceChatAgent:                  "/chat-agent",
 		servicecatalog.ServiceChatDrone:                  "/chat-drone",
 		servicecatalog.ServiceChatGateway:                "/chat-gateway",
+		servicecatalog.ServiceCommerce:                   "/commerce",
 		servicecatalog.ServiceCheckout:                   "/checkout",
 		servicecatalog.ServiceDevices:                    "/devices",
 		servicecatalog.ServiceFiles:                      "/files",
@@ -76,6 +77,7 @@ func TestCatalogContainsCanonicalPlatformServices(t *testing.T) {
 		servicecatalog.ServiceLedger:                     "/ledger",
 		servicecatalog.ServiceLimits:                     "/limits",
 		servicecatalog.ServiceLoans:                      "/loans",
+		servicecatalog.ServiceManufacturing:              "/manufacturing",
 		servicecatalog.ServiceMatching:                   "/matching",
 		servicecatalog.ServiceNotification:               "/notification",
 		servicecatalog.ServiceNotificationAfricasTalking: "/notification-africastalking",
@@ -93,6 +95,7 @@ func TestCatalogContainsCanonicalPlatformServices(t *testing.T) {
 		servicecatalog.ServicePaymentPawaPay:             "/payment-pawapay",
 		servicecatalog.ServicePaymentPolar:               "/payment-polar",
 		servicecatalog.ServicePaymentStripe:              "/payment-stripe",
+		servicecatalog.ServiceProcurement:                "/procurement",
 		servicecatalog.ServiceProfile:                    "/profile",
 		servicecatalog.ServiceQueuestore:                 "/queuestore",
 		servicecatalog.ServiceRedirect:                   "/redirect",
@@ -109,7 +112,7 @@ func TestCatalogContainsCanonicalPlatformServices(t *testing.T) {
 
 	catalog, err := servicecatalog.New("https://api.example.org")
 	require.NoError(t, err)
-	require.Len(t, expected, 47)
+	require.Len(t, expected, 50)
 
 	for serviceID, audiencePath := range expected {
 		audience, audienceErr := catalog.Audience(serviceID)
