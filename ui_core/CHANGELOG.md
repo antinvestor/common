@@ -1,3 +1,12 @@
+## 0.6.0
+
+- **Breaking:** moves to connect-dart 2 and the protobuf 6 runtime:
+  `connectrpc ^2.0.0`, `protobuf ^6.1.0`, `antinvestor_api_common ^2.0.0`,
+  `fixnum ^1.1.1`. Apps that depend on ui_core must use the 2.x
+  `antinvestor_api_*` SDKs; well-known types now come from
+  `package:protobuf/well_known_types/...` through `antinvestor_api_common`.
+  No ui_core API changes.
+
 ## 0.5.1
 
 - `AdminEntityListPage` gains an optional `filters` slot, rendered below
